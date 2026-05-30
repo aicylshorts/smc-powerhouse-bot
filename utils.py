@@ -13,8 +13,8 @@ def detect_fvg(df: pd.DataFrame):
 
 def detect_order_block(df: pd.DataFrame, direction: str, lookback=15):
     '''
-    Refined Order Block detection.
-    Looks for the last opposing candle before a strong displacement (impulsive move).
+    Improved Order Block with mitigation awareness.
+    Detects the last opposing candle before strong displacement.
     '''
     if len(df) < lookback + 6:
         return None
@@ -23,19 +23,18 @@ def detect_order_block(df: pd.DataFrame, direction: str, lookback=15):
 
     if direction == 'bullish':
         for i in range(len(recent) - 4, 1, -1):
-            # Bearish candle (potential bullish OB)
             if recent['close'].iloc[i] < recent['open'].iloc[i]:
                 candle_body = abs(recent['close'].iloc[i] - recent['open'].iloc[i])
-                # Strong bullish displacement after this candle
                 move_after = recent['close'].iloc[i+1] - recent['close'].iloc[i]
-                if move_after > candle_body * 1.8:  # Strong displacement
+                if move_after > candle_body * 1.8:
                     return {
                         'type': 'bullish_ob',
                         'low': recent['low'].iloc[i],
                         'high': recent['high'].iloc[i],
-                        'mitigation_level': recent['high'].iloc[i]  # Price often mitigates to OB high/low
+                        'mitigation_level': recent['high'].iloc[i],
+                        'strength': move_after / candle_body if candle_body > 0 else 1
                     }
-    else:  # bearish
+    else:
         for i in range(len(recent) - 4, 1, -1):
             if recent['close'].iloc[i] > recent['open'].iloc[i]:
                 candle_body = abs(recent['close'].iloc[i] - recent['open'].iloc[i])
@@ -45,19 +44,21 @@ def detect_order_block(df: pd.DataFrame, direction: str, lookback=15):
                         'type': 'bearish_ob',
                         'low': recent['low'].iloc[i],
                         'high': recent['high'].iloc[i],
-                        'mitigation_level': recent['low'].iloc[i]
+                        'mitigation_level': recent['low'].iloc[i],
+                        'strength': move_after / candle_body if candle_body > 0 else 1
                     }
     return None
 
 
-def calculate_confluence_score(sweep=False, fvg=False, ob=False, bos=False, displacement=False, htf_alignment=False):
+def calculate_confluence_score(sweep=False, fvg=False, ob=False, bos=False, displacement=False, htf_alignment=False, ob_mitigated=False):
     score = 0
     if sweep: score += 25
     if fvg: score += 20
-    if ob: score += 25
-    if bos: score += 12
+    if ob: score += 22
+    if ob_mitigated: score += 8   # Extra if price already mitigated to OB
+    if bos: score += 10
     if displacement: score += 10
-    if htf_alignment: score += 8   # Bonus for higher timeframe alignment
+    if htf_alignment: score += 10
     return min(score, 100)
 
 
@@ -88,20 +89,20 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str, htf_df: pd.DataFram
         raw_risk = entry - sl
 
         ob = detect_order_block(df, 'bullish')
-        has_ob = ob is not None and (ob['low'] <= entry <= ob['high'] * 1.003)
+        has_ob = ob is not None
+        ob_mitigated = has_ob and (ob['low'] <= entry <= ob['high'] * 1.005)
 
         displacement = (close - low) > (swing_high - swing_low) * 0.28
 
-        # Simple HTF alignment check (if higher timeframe data is provided)
         htf_alignment = False
         if htf_df is not None and len(htf_df) > 20:
             htf_recent = htf_df.iloc[-10:]
-            if close > htf_recent['close'].iloc[0]:  # Higher TF bias bullish
+            if close > htf_recent['close'].iloc[0]:
                 htf_alignment = True
 
         score = calculate_confluence_score(
-            sweep=True, fvg=True, ob=has_ob, bos=True,
-            displacement=displacement, htf_alignment=htf_alignment
+            sweep=True, fvg=True, ob=has_ob, ob_mitigated=ob_mitigated,
+            bos=True, displacement=displacement, htf_alignment=htf_alignment
         )
 
     elif sweep_bearish and has_bearish_fvg:
@@ -111,7 +112,8 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str, htf_df: pd.DataFram
         raw_risk = sl - entry
 
         ob = detect_order_block(df, 'bearish')
-        has_ob = ob is not None and (ob['low'] * 0.997 <= entry <= ob['high'])
+        has_ob = ob is not None
+        ob_mitigated = has_ob and (ob['low'] * 0.995 <= entry <= ob['high'])
 
         displacement = (high - close) > (swing_high - swing_low) * 0.28
 
@@ -122,8 +124,8 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str, htf_df: pd.DataFram
                 htf_alignment = True
 
         score = calculate_confluence_score(
-            sweep=True, fvg=True, ob=has_ob, bos=True,
-            displacement=displacement, htf_alignment=htf_alignment
+            sweep=True, fvg=True, ob=has_ob, ob_mitigated=ob_mitigated,
+            bos=True, displacement=displacement, htf_alignment=htf_alignment
         )
     else:
         return None
@@ -131,7 +133,6 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str, htf_df: pd.DataFram
     if score < 75:
         return None
 
-    # Dynamic TPs
     if score >= 90:
         tp1_mult, tp2_mult, tp3_mult = 1.8, 3.5, 5.0
     elif score >= 83:
@@ -157,6 +158,6 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str, htf_df: pd.DataFram
         'tp3': round(tp3, 5),
         'score': int(score),
         'tp1_r': tp1_mult,
-        'tp2_r': tp2_mult,
+        'tp2_r': tp2_r,
         'tp3_r': tp3_mult
     }
