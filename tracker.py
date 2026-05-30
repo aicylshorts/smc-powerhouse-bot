@@ -17,7 +17,7 @@ def save_trades(data):
         json.dump(data, f, indent=2)
 
 
-def log_signal(signal_id, symbol, direction, entry, sl, tp1, tp2, tp3, score, tf, timestamp=None):
+def log_signal(signal_id, symbol, direction, entry, sl, tp1, tp2, tp3, score, tf, session="Unknown", timestamp=None):
     data = load_trades()
     if timestamp is None:
         timestamp = datetime.now().isoformat()
@@ -32,6 +32,7 @@ def log_signal(signal_id, symbol, direction, entry, sl, tp1, tp2, tp3, score, tf
         "tp3": tp3,
         "score": score,
         "tf": tf,
+        "session": session,
         "timestamp": timestamp
     }
     save_trades(data)
@@ -43,7 +44,7 @@ def record_outcome(signal_id, outcome, rr=None):
         return False, "Signal ID not found"
 
     data["outcomes"][signal_id] = {
-        "outcome": outcome.upper(),  # WIN, LOSS, BE, NO_TRADE
+        "outcome": outcome.upper(),
         "rr": rr,
         "recorded_at": datetime.now().isoformat()
     }
@@ -56,7 +57,6 @@ def get_monthly_report(year=None, month=None):
     if not data["signals"]:
         return "No signals recorded yet."
 
-    # Filter by month if provided
     signals = data["signals"]
     outcomes = data["outcomes"]
 
@@ -67,7 +67,6 @@ def get_monthly_report(year=None, month=None):
 
     win_rate = round((wins / total_traded * 100), 1) if total_traded > 0 else 0
 
-    # Average RR from wins
     win_rrs = [o["rr"] for o in outcomes.values() if o["outcome"] == "WIN" and o.get("rr")]
     avg_rr = round(sum(win_rrs) / len(win_rrs), 2) if win_rrs else 0
 
