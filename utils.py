@@ -24,9 +24,8 @@ def calculate_confluence_score(sweep=False, fvg=False, ob=False, bos=False, mult
 
 def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str):
     '''
-    Mulham-style SMC detection with dynamic RR.
-    Stronger setups get better RR.
-    Very strong setups (90+) get 3 TPs.
+    Mulham-style SMC with 3 TPs for every setup.
+    RR improves with setup strength.
     '''
     if len(df) < 40:
         return None
@@ -40,7 +39,6 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str):
     swing_high = recent['high'].max()
     swing_low = recent['low'].min()
 
-    # Stricter liquidity sweep
     sweep_bullish = (low < swing_low * 0.998) and (close > prev_close) and (close - low > (swing_high - swing_low) * 0.3)
     sweep_bearish = (high > swing_high * 1.002) and (close < prev_close) and (high - close > (swing_high - swing_low) * 0.3)
 
@@ -70,37 +68,32 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str):
     if score < 75:
         return None
 
-    # Dynamic RR based on strength
+    # Dynamic 3 TPs based on strength
     if score >= 90:
-        # Very strong setup → 3 TPs
-        tp1 = entry + raw_risk * 1.8 if direction == 'BUY' else entry - raw_risk * 1.8
-        tp2 = entry + raw_risk * 3.5 if direction == 'BUY' else entry - raw_risk * 3.5
-        tp3 = entry + raw_risk * 4.8 if direction == 'BUY' else entry - raw_risk * 4.8
-        tp1_r, tp2_r, tp3_r = 1.8, 3.5, 4.8
+        tp1_mult, tp2_mult, tp3_mult = 1.8, 3.5, 5.0
     elif score >= 83:
-        tp1 = entry + raw_risk * 1.7 if direction == 'BUY' else entry - raw_risk * 1.7
-        tp2 = entry + raw_risk * 3.3 if direction == 'BUY' else entry - raw_risk * 3.3
-        tp3 = None
-        tp1_r, tp2_r, tp3_r = 1.7, 3.3, None
+        tp1_mult, tp2_mult, tp3_mult = 1.6, 3.2, 4.5
     else:
-        tp1 = entry + raw_risk * 1.6 if direction == 'BUY' else entry - raw_risk * 1.6
-        tp2 = entry + raw_risk * 3.0 if direction == 'BUY' else entry - raw_risk * 3.0
-        tp3 = None
-        tp1_r, tp2_r, tp3_r = 1.6, 3.0, None
+        tp1_mult, tp2_mult, tp3_mult = 1.5, 2.8, 4.0
 
-    result = {
+    if direction == 'BUY':
+        tp1 = entry + raw_risk * tp1_mult
+        tp2 = entry + raw_risk * tp2_mult
+        tp3 = entry + raw_risk * tp3_mult
+    else:
+        tp1 = entry - raw_risk * tp1_mult
+        tp2 = entry - raw_risk * tp2_mult
+        tp3 = entry - raw_risk * tp3_mult
+
+    return {
         'direction': direction,
         'entry': round(entry, 5),
         'sl': round(sl, 5),
         'tp1': round(tp1, 5),
         'tp2': round(tp2, 5),
+        'tp3': round(tp3, 5),
         'score': int(score),
-        'tp1_r': tp1_r,
-        'tp2_r': tp2_r,
+        'tp1_r': tp1_mult,
+        'tp2_r': tp2_mult,
+        'tp3_r': tp3_mult
     }
-
-    if tp3 is not None:
-        result['tp3'] = round(tp3, 5)
-        result['tp3_r'] = tp3_r
-
-    return result
