@@ -3,6 +3,11 @@ import time
 import requests
 import pandas as pd
 
+try:
+    import yfinance as yf
+except ImportError:
+    yf = None
+
 def _map_oanda_granularity(tf: str) -> str:
     mapping = {
         '15m': 'M15',
@@ -74,8 +79,6 @@ def get_finnhub_candles(symbol, resolution='15', count=300):
             return pd.DataFrame()
 
         data = resp.json()
-
-        # Finnhub specific error handling
         if data.get('s') != 'ok':
             print(f"Finnhub returned no data for {symbol}")
             return pd.DataFrame()
@@ -92,6 +95,25 @@ def get_finnhub_candles(symbol, resolution='15', count=300):
 
     except Exception as e:
         print(f'Finnhub error for {symbol}: {e}')
+        return pd.DataFrame()
+
+
+def get_yfinance_candles(symbol, period='5d', interval='15m'):
+    '''Fallback using yfinance (free, no API key)'''
+    if yf is None:
+        print("yfinance not installed")
+        return pd.DataFrame()
+
+    try:
+        ticker = yf.Ticker(symbol)
+        df = ticker.history(period=period, interval=interval)
+        if df.empty:
+            return pd.DataFrame()
+        df = df[['Open', 'High', 'Low', 'Close']].copy()
+        df.columns = ['open', 'high', 'low', 'close']
+        return df
+    except Exception as e:
+        print(f'yfinance error for {symbol}: {e}')
         return pd.DataFrame()
 
 
