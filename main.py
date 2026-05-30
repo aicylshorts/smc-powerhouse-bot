@@ -49,12 +49,19 @@ def calculate_risk_per_lot(sl_price, entry_price, symbol):
     return risk_per_0_01
 
 def is_high_impact_news_time():
-    hour = datetime.now(timezone.utc).hour
-    minute = datetime.now(timezone.utc).minute
-    if hour == 14 and 20 <= minute <= 40:
-        return True
-    if hour == 15 and minute <= 10:
-        return True
+    from config import AVOID_NEWS_MINUTES_BEFORE, AVOID_NEWS_MINUTES_AFTER, HIGH_IMPACT_WINDOWS
+
+    now = datetime.now(timezone.utc)
+    current_hour = now.hour
+    current_minute = now.minute
+
+    for news_hour, news_minute in HIGH_IMPACT_WINDOWS:
+        news_time = now.replace(hour=news_hour, minute=news_minute, second=0, microsecond=0)
+        time_diff = (now - news_time).total_seconds() / 60
+
+        if -AVOID_NEWS_MINUTES_BEFORE <= time_diff <= AVOID_NEWS_MINUTES_AFTER:
+            return True
+
     return False
 
 def send_telegram_message(message):
