@@ -61,14 +61,53 @@ def get_monthly_report(year=None, month=None):
     outcomes = data["outcomes"]
 
     total_signals = len(signals)
-    total_traded = len([o for o in outcomes.values() if o["outcome"] != "NO_TRADE"])
-    wins = len([o for o in outcomes.values() if o["outcome"] == "WIN"])
-    losses = len([o for o in outcomes.values() if o["outcome"] == "LOSS"])
+    total_traded = 0
+    wins = 0
+    losses = 0
+    win_rrs = []
+
+    # Session stats
+    session_stats = {}
+
+    for sig_id, outcome_data in outcomes.items():
+        if sig_id not in signals:
+            continue
+
+        outcome = outcome_data.get("outcome", "")
+        rr = outcome_data.get("rr")
+
+        if outcome != "NO_TRADE":
+            total_traded += 1
+
+        if outcome == "WIN":
+            wins += 1
+            if rr:
+                win_rrs.append(rr)
+        elif outcome == "LOSS":
+            losses += 1
+
+        # Session breakdown
+        session = signals[sig_id].get("session", "Unknown")
+        if session not in session_stats:
+            session_stats[session] = {"traded": 0, "wins": 0, "losses": 0}
+
+        if outcome != "NO_TRADE":
+            session_stats[session]["traded"] += 1
+        if outcome == "WIN":
+            session_stats[session]["wins"] += 1
+        if outcome == "LOSS":
+            session_stats[session]["losses"] += 1
 
     win_rate = round((wins / total_traded * 100), 1) if total_traded > 0 else 0
-
-    win_rrs = [o["rr"] for o in outcomes.values() if o["outcome"] == "WIN" and o.get("rr")]
     avg_rr = round(sum(win_rrs) / len(win_rrs), 2) if win_rrs else 0
+
+    # Build session breakdown text
+    session_text = "\nSession Breakdown:\n"
+    for session, stats in session_stats.items():
+        s_traded = stats["traded"]
+        s_wins = stats["wins"]
+        s_wr = round((s_wins / s_traded * 100), 1) if s_traded > 0 else 0
+        session_text += f"- {session}: {s_traded} trades | {s_wins} wins ({s_wr}%)\n"
 
     report = f"""Monthly Performance Report
 
@@ -81,5 +120,6 @@ Losses: {losses}
 Win Rate: {win_rate}%
 
 Average RR (on wins): {avg_rr}R
+{session_text}
 """
     return report
