@@ -1,0 +1,7 @@
+requests
+pandas
+numpy
+python-dotenv
+python-telegram-bot==21.4
+schedule
+pytz
