@@ -98,8 +98,37 @@ def get_finnhub_candles(symbol, resolution='15', count=300):
         return pd.DataFrame()
 
 
+def get_twelve_data_candles(symbol, interval='15min', outputsize=300):
+    '''Twelve Data as backup source'''
+    token = os.getenv('TWELVE_DATA_TOKEN')
+    if not token:
+        print("TWELVE_DATA_TOKEN not set")
+        return pd.DataFrame()
+
+    url = f'https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&outputsize={outputsize}&apikey={token}'
+
+    try:
+        resp = _make_request_with_retry(url)
+        if resp is None:
+            return pd.DataFrame()
+
+        data = resp.json()
+        if 'values' not in data:
+            print(f"Twelve Data error: {data.get('message', 'Unknown error')}")
+            return pd.DataFrame()
+
+        df = pd.DataFrame(data['values'])
+        df['datetime'] = pd.to_datetime(df['datetime'])
+        df.set_index('datetime', inplace=True)
+        df = df[['open', 'high', 'low', 'close']].astype(float)
+        return df.sort_index()
+
+    except Exception as e:
+        print(f'Twelve Data error for {symbol}: {e}')
+        return pd.DataFrame()
+
+
 def get_yfinance_candles(symbol, period='5d', interval='15m'):
-    '''Fallback using yfinance (free, no API key)'''
     if yf is None:
         print("yfinance not installed")
         return pd.DataFrame()
