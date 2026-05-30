@@ -2,7 +2,7 @@ import os
 import time
 import threading
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 import schedule
 import requests
 
@@ -25,6 +25,20 @@ else:
 
 sent_signals = {}
 last_update_id = 0
+
+def get_trading_session():
+    '''Return current trading session based on UTC time'''
+    hour = datetime.now(timezone.utc).hour
+    if 0 <= hour < 8:
+        return 'Asian'
+    elif 8 <= hour < 13:
+        return 'London'
+    elif 13 <= hour < 17:
+        return 'London-NY Overlap'
+    elif 17 <= hour < 22:
+        return 'New York'
+    else:
+        return 'Late NY / Asian'
 
 def send_telegram_message(message):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -101,6 +115,8 @@ def generate_signals():
     from data_fetcher import get_oanda_candles, get_binance_candles
     from utils import detect_smc_setup
 
+    current_session = get_trading_session()
+
     for broker, symbols in ASSETS.items():
         for sym in symbols:
             for tf in TIMEFRAMES:
@@ -127,7 +143,6 @@ def generate_signals():
                             tp3_r = setup.get('tp3_r', 4.0)
                             prob_label = 'A+' if score >= PROB_THRESHOLD_AP else 'A'
 
-                            # Short simple ID
                             short_sym = sym.replace('_', '')[:6]
                             signal_id = f'{short_sym}{int(time.time()) % 10000}'
 
@@ -138,6 +153,7 @@ def generate_signals():
                                    f'TP1: {tp1_r}R ({tp1:.5f})\n'
                                    f'TP2: {tp2_r}R ({tp2:.5f})\n'
                                    f'TP3: {tp3_r}R ({tp3:.5f})\n'
+                                   f'Session: {current_session}\n'
                                    f'({prob_label} {score}%) {tf}\n'
                                    f'#{signal_id}\n'
                                    f'Monitor CHOCH for exit')
