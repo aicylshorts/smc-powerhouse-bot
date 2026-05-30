@@ -33,14 +33,48 @@ def detect_order_block(df: pd.DataFrame, direction: str, lookback=15):
     return None
 
 
-def calculate_confluence_score(sweep=False, fvg=False, ob=False, bos=False, displacement=False, htf_alignment=False, ob_mitigated=False, real_sweep=False, mss=False):
+def detect_breaker_block(df: pd.DataFrame, direction: str, lookback=20):
+    '''
+    Breaker Block detection.
+    When an OB is broken and price returns to it from the other side, it becomes a Breaker.
+    '''
+    if len(df) < lookback:
+        return None
+    recent = df.iloc[-lookback:].reset_index(drop=True)
+
+    if direction == 'bullish':
+        for i in range(len(recent) - 5, 2, -1):
+            # Previous bullish OB that was broken downward
+            if recent['close'].iloc[i] < recent['open'].iloc[i]:
+                ob_high = recent['high'].iloc[i]
+                # Later price broke below this OB
+                later_low = recent['low'].iloc[i+2:i+5].min()
+                if later_low < ob_high:
+                    # Now price is coming back from below
+                    current_price = recent['close'].iloc[-1]
+                    if current_price > ob_high * 0.998:
+                        return {'type': 'bullish_breaker', 'level': ob_high}
+    else:
+        for i in range(len(recent) - 5, 2, -1):
+            if recent['close'].iloc[i] > recent['open'].iloc[i]:
+                ob_low = recent['low'].iloc[i]
+                later_high = recent['high'].iloc[i+2:i+5].max()
+                if later_high > ob_low:
+                    current_price = recent['close'].iloc[-1]
+                    if current_price < ob_low * 1.002:
+                        return {'type': 'bearish_breaker', 'level': ob_low}
+    return None
+
+
+def calculate_confluence_score(sweep=False, fvg=False, ob=False, bos=False, displacement=False, htf_alignment=False, ob_mitigated=False, real_sweep=False, mss=False, breaker=False):
     score = 0
-    if sweep: score += 20
-    if fvg: score += 18
-    if ob: score += 22
+    if sweep: score += 18
+    if fvg: score += 16
+    if ob: score += 20
     if ob_mitigated: score += 8
-    if real_sweep: score += 12      # Bonus for real (non-inducement) sweep
-    if mss: score += 12             # Market Structure Shift
+    if real_sweep: score += 12
+    if mss: score += 12
+    if breaker: score += 15      # Breaker Blocks are high probability
     if displacement: score += 8
     if htf_alignment: score += 8
     if bos: score += 5
@@ -60,11 +94,9 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str, htf_df: pd.DataFram
     swing_high = recent['high'].max()
     swing_low = recent['low'].min()
 
-    # Liquidity Sweep
     sweep_bullish = (low < swing_low * 0.998) and (close > prev_close)
     sweep_bearish = (high > swing_high * 1.002) and (close < prev_close)
 
-    # Check if it's a REAL sweep (strong follow-through) vs inducement
     real_sweep_bullish = sweep_bullish and (close - low) > (swing_high - swing_low) * 0.35
     real_sweep_bearish = sweep_bearish and (high - close) > (swing_high - swing_low) * 0.35
 
@@ -82,9 +114,10 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str, htf_df: pd.DataFram
         has_ob = ob is not None
         ob_mitigated = has_ob and (ob['low'] <= entry <= ob['high'] * 1.005)
 
-        displacement = (close - low) > (swing_high - swing_low) * 0.3
+        breaker = detect_breaker_block(df, 'bullish')
+        has_breaker = breaker is not None
 
-        # Market Structure Shift (MSS) - price breaks previous swing in direction of move
+        displacement = (close - low) > (swing_high - swing_low) * 0.3
         mss = close > swing_high * 0.997
 
         htf_alignment = False
@@ -95,7 +128,7 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str, htf_df: pd.DataFram
 
         score = calculate_confluence_score(
             sweep=True, fvg=True, ob=has_ob, ob_mitigated=ob_mitigated,
-            real_sweep=real_sweep_bullish, mss=mss,
+            real_sweep=real_sweep_bullish, mss=mss, breaker=has_breaker,
             displacement=displacement, htf_alignment=htf_alignment
         )
 
@@ -109,8 +142,10 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str, htf_df: pd.DataFram
         has_ob = ob is not None
         ob_mitigated = has_ob and (ob['low'] * 0.995 <= entry <= ob['high'])
 
-        displacement = (high - close) > (swing_high - swing_low) * 0.3
+        breaker = detect_breaker_block(df, 'bearish')
+        has_breaker = breaker is not None
 
+        displacement = (high - close) > (swing_high - swing_low) * 0.3
         mss = close < swing_low * 1.003
 
         htf_alignment = False
@@ -121,13 +156,13 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str, htf_df: pd.DataFram
 
         score = calculate_confluence_score(
             sweep=True, fvg=True, ob=has_ob, ob_mitigated=ob_mitigated,
-            real_sweep=real_sweep_bearish, mss=mss,
+            real_sweep=real_sweep_bearish, mss=mss, breaker=has_breaker,
             displacement=displacement, htf_alignment=htf_alignment
         )
     else:
         return None
 
-    if score < 78:   # Slightly raised threshold for quality
+    if score < 78:
         return None
 
     if score >= 92:
