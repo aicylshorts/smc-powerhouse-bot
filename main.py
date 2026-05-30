@@ -39,6 +39,34 @@ def get_trading_session():
     else:
         return 'Late NY / Asian'
 
+def calculate_risk_per_lot(sl_price, entry_price, symbol):
+    '''Rough estimation of risk per 0.01 lot'''
+    sl_distance = abs(sl_price - entry_price)
+
+    # Rough estimates (adjust based on your broker)
+    if 'XAU' in symbol or 'XAG' in symbol:
+        # Gold/Silver: ~$0.10 per pip per 0.01 lot (simplified)
+        risk_per_0_01 = round(sl_distance * 10, 2)  # rough
+    else:
+        # Forex majors: ~$0.10 per pip per 0.01 lot
+        risk_per_0_01 = round(sl_distance * 10, 2)
+
+    return risk_per_0_01
+
+def is_high_impact_news_time():
+    '''Simple news filter - avoid trading around major news'''
+    # You can expand this later with real economic calendar
+    hour = datetime.now(timezone.utc).hour
+    minute = datetime.now(timezone.utc).minute
+
+    # Example: Avoid around 14:30 UTC (common for US data)
+    if hour == 14 and 20 <= minute <= 40:
+        return True
+    if hour == 15 and minute <= 10:  # buffer after
+        return True
+
+    return False
+
 def send_telegram_message(message):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         return
@@ -115,6 +143,7 @@ def generate_signals():
     from utils import detect_smc_setup
 
     current_session = get_trading_session()
+    high_news = is_high_impact_news_time()
 
     for broker, symbols in ASSETS.items():
         for sym in symbols:
@@ -131,6 +160,10 @@ def generate_signals():
                     if setup:
                         score = setup.get('score', 0)
                         if score >= PROB_THRESHOLD_A:
+                            # Skip if high impact news window
+                            if high_news:
+                                continue
+
                             direction = setup['direction']
                             entry = setup['entry']
                             sl = setup['sl']
@@ -145,10 +178,13 @@ def generate_signals():
                             short_sym = sym.replace('_', '')[:6]
                             signal_id = f'{short_sym}{int(time.time()) % 10000}'
 
+                            risk_per_lot = calculate_risk_per_lot(sl, entry, sym)
+
                             tracker.log_signal(signal_id, sym, direction, entry, sl, tp1, tp2, tp3, score, tf, current_session)
 
                             msg = (f'{sym} {direction} @ {entry:.5f}\n'
                                    f'SL: {sl:.5f}\n'
+                                   f'Risk per 0.01 lot: ~${risk_per_lot}\n'
                                    f'TP1: {tp1_r}R ({tp1:.5f})\n'
                                    f'TP2: {tp2_r}R ({tp2:.5f})\n'
                                    f'TP3: {tp3_r}R ({tp3:.5f})\n'
