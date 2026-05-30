@@ -50,18 +50,14 @@ def calculate_risk_per_lot(sl_price, entry_price, symbol):
 
 def is_high_impact_news_time():
     from config import AVOID_NEWS_MINUTES_BEFORE, AVOID_NEWS_MINUTES_AFTER, HIGH_IMPACT_WINDOWS
-
     now = datetime.now(timezone.utc)
     current_hour = now.hour
     current_minute = now.minute
-
     for news_hour, news_minute in HIGH_IMPACT_WINDOWS:
         news_time = now.replace(hour=news_hour, minute=news_minute, second=0, microsecond=0)
         time_diff = (now - news_time).total_seconds() / 60
-
         if -AVOID_NEWS_MINUTES_BEFORE <= time_diff <= AVOID_NEWS_MINUTES_AFTER:
             return True
-
     return False
 
 def send_telegram_message(message):
@@ -148,12 +144,17 @@ def generate_signals():
                 try:
                     if broker == 'OANDA':
                         df = get_oanda_candles(sym, tf)
+                        # Automatic Higher Timeframe data for MTF confirmation
+                        htf_tf = '1h' if tf == '15m' else ('4h' if tf == '1h' else None)
+                        htf_df = get_oanda_candles(sym, htf_tf) if htf_tf else None
                     else:
                         df = get_binance_candles(sym, tf)
+                        htf_df = None  # Binance MTF can be added later
+
                     if df is None or len(df) < 50:
                         continue
 
-                    setup = detect_smc_setup(df, sym, tf)
+                    setup = detect_smc_setup(df, sym, tf, htf_df=htf_df)
                     if setup:
                         score = setup.get('score', 0)
                         if score >= PROB_THRESHOLD_A:
