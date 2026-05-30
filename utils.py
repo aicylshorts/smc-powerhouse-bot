@@ -24,9 +24,9 @@ def calculate_confluence_score(sweep=False, fvg=False, ob=False, bos=False, mult
 
 def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str):
     '''
-    Mulham-style stricter SMC detection.
-    Requires clear liquidity sweep + FVG + decent structure.
-    Higher confluence threshold for sniper entries.
+    Mulham-style SMC detection with dynamic RR.
+    Stronger setups get better RR.
+    Very strong setups (90+) get 3 TPs.
     '''
     if len(df) < 40:
         return None
@@ -40,16 +40,14 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str):
     swing_high = recent['high'].max()
     swing_low = recent['low'].min()
 
-    # Stricter liquidity sweep (clear wick beyond swing + strong close back)
+    # Stricter liquidity sweep
     sweep_bullish = (low < swing_low * 0.998) and (close > prev_close) and (close - low > (swing_high - swing_low) * 0.3)
     sweep_bearish = (high > swing_high * 1.002) and (close < prev_close) and (high - close > (swing_high - swing_low) * 0.3)
 
-    # Recent FVGs
     fvgs = detect_fvg(df.iloc[-12:])
     has_bullish_fvg = any(f['type'] == 'bullish' for f in fvgs)
     has_bearish_fvg = any(f['type'] == 'bearish' for f in fvgs)
 
-    # Structure
     bos_bullish = close > swing_high * 0.997
     bos_bearish = close < swing_low * 1.003
 
@@ -57,28 +55,52 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str):
         direction = 'BUY'
         entry = close
         sl = min(swing_low, low) * 0.994
-        tp1 = entry + (entry - sl) * 1.6
-        tp2 = entry + (entry - sl) * 3.0
+        raw_risk = entry - sl
         score = calculate_confluence_score(sweep=True, fvg=True, ob=True, bos=bos_bullish, multi_tf=True)
+
     elif sweep_bearish and has_bearish_fvg:
         direction = 'SELL'
         entry = close
         sl = max(swing_high, high) * 1.006
-        tp1 = entry - (sl - entry) * 1.6
-        tp2 = entry - (sl - entry) * 3.0
+        raw_risk = sl - entry
         score = calculate_confluence_score(sweep=True, fvg=True, ob=True, bos=bos_bearish, multi_tf=True)
     else:
         return None
 
-    # Mulham-style: Higher bar - only strong confluences
     if score < 75:
         return None
 
-    return {
+    # Dynamic RR based on strength
+    if score >= 90:
+        # Very strong setup → 3 TPs
+        tp1 = entry + raw_risk * 1.8 if direction == 'BUY' else entry - raw_risk * 1.8
+        tp2 = entry + raw_risk * 3.5 if direction == 'BUY' else entry - raw_risk * 3.5
+        tp3 = entry + raw_risk * 4.8 if direction == 'BUY' else entry - raw_risk * 4.8
+        tp1_r, tp2_r, tp3_r = 1.8, 3.5, 4.8
+    elif score >= 83:
+        tp1 = entry + raw_risk * 1.7 if direction == 'BUY' else entry - raw_risk * 1.7
+        tp2 = entry + raw_risk * 3.3 if direction == 'BUY' else entry - raw_risk * 3.3
+        tp3 = None
+        tp1_r, tp2_r, tp3_r = 1.7, 3.3, None
+    else:
+        tp1 = entry + raw_risk * 1.6 if direction == 'BUY' else entry - raw_risk * 1.6
+        tp2 = entry + raw_risk * 3.0 if direction == 'BUY' else entry - raw_risk * 3.0
+        tp3 = None
+        tp1_r, tp2_r, tp3_r = 1.6, 3.0, None
+
+    result = {
         'direction': direction,
         'entry': round(entry, 5),
         'sl': round(sl, 5),
         'tp1': round(tp1, 5),
         'tp2': round(tp2, 5),
-        'score': int(score)
+        'score': int(score),
+        'tp1_r': tp1_r,
+        'tp2_r': tp2_r,
     }
+
+    if tp3 is not None:
+        result['tp3'] = round(tp3, 5)
+        result['tp3_r'] = tp3_r
+
+    return result
