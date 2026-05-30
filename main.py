@@ -5,9 +5,12 @@ import logging
 from datetime import datetime
 import schedule
 import requests
+import json
 
 from flask import Flask
 from dotenv import load_dotenv
+
+import tracker
 
 load_dotenv()
 
@@ -20,30 +23,72 @@ TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
 if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-    logger.error("❌ Missing TELEGRAM_TOKEN or TELEGRAM_CHAT_ID in Render Environment Variables!")
+    logger.error("❌ Missing TELEGRAM_TOKEN or TELEGRAM_CHAT_ID!")
 else:
     logger.info("✅ Telegram credentials loaded")
 
 sent_signals = {}
+last_update_id = 0   # For Telegram getUpdates
 
 def send_telegram_message(message):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        logger.warning("Telegram not configured")
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "HTML"
-    }
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
     try:
-        resp = requests.post(url, json=payload, timeout=10)
-        if resp.status_code == 200:
-            logger.info("✅ Telegram message sent successfully")
-        else:
-            logger.error(f"❌ Telegram API error {resp.status_code}: {resp.text}")
+        requests.post(url, json=payload, timeout=10)
     except Exception as e:
-        logger.error(f"❌ Failed to send Telegram message: {e}")
+        logger.error(f"Telegram send error: {e}")
+
+def check_telegram_commands():
+    global last_update_id
+    if not TELEGRAM_TOKEN:
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?offset={last_update_id + 1}&timeout=5"
+    try:
+        resp = requests.get(url, timeout=10).json()
+        for update in resp.get("result", []):
+            last_update_id = update["update_id"]
+            message = update.get("message", {})
+            text = message.get("text", "")
+            if text.startswith("/"):
+                handle_command(text)
+    except Exception as e:
+        pass  # Silent fail on free tier
+
+def handle_command(text):
+    parts = text.strip().split()
+    cmd = parts[0].lower()
+
+    if cmd == "/stats":
+        report = tracker.get_monthly_report()
+        send_telegram_message(report)
+        return
+
+    if len(parts) < 2:
+        return
+
+    signal_id = parts[1].replace("#", "")
+
+    if cmd == "/win" and len(parts) >= 3:
+        try:
+            rr = float(parts[2].replace("R", ""))
+        except:
+            rr = None
+        tracker.record_outcome(signal_id, "WIN", rr)
+        send_telegram_message(f"✅ Recorded WIN for #{signal_id}")
+
+    elif cmd == "/loss":
+        tracker.record_outcome(signal_id, "LOSS")
+        send_telegram_message(f"✅ Recorded LOSS for #{signal_id}")
+
+    elif cmd == "/be":
+        tracker.record_outcome(signal_id, "BE")
+        send_telegram_message(f"✅ Recorded Breakeven for #{signal_id}")
+
+    elif cmd == "/notrade":
+        tracker.record_outcome(signal_id, "NO_TRADE")
+        send_telegram_message(f"✅ Marked as NO TRADE for #{signal_id}")
 
 @app.route('/')
 def home():
@@ -55,6 +100,8 @@ def health():
 
 def generate_signals():
     logger.info("Scanning for SMC setups...")
+    check_telegram_commands()  # Check for commands
+
     from config import ASSETS, TIMEFRAMES, POLL_INTERVAL_SEC, COOLDOWN_MIN, PROB_THRESHOLD_A, PROB_THRESHOLD_AP
     from data_fetcher import get_oanda_candles, get_binance_candles
     from utils import detect_smc_setup
@@ -69,6 +116,7 @@ def generate_signals():
                         df = get_binance_candles(sym, tf)
                     if df is None or len(df) < 50:
                         continue
+
                     setup = detect_smc_setup(df, sym, tf)
                     if setup:
                         score = setup.get('score', 0)
@@ -78,35 +126,44 @@ def generate_signals():
                             sl = setup['sl']
                             tp1 = setup['tp1']
                             tp2 = setup['tp2']
-                            tp1_r = setup.get('tp1_r', 1.6)
-                            tp2_r = setup.get('tp2_r', 3.0)
+                            tp3 = setup['tp3']
+                            tp1_r = setup.get('tp1_r', 1.5)
+                            tp2_r = setup.get('tp2_r', 2.8)
+                            tp3_r = setup.get('tp3_r', 4.0)
                             prob_label = 'A+' if score >= PROB_THRESHOLD_AP else 'A'
 
-                            # Build message with RR + actual prices
-                            msg = f"{sym} {direction} @ {entry:.5f}\nSL: {sl:.5f}\nTP1: {tp1_r}R ({tp1:.5f})\nTP2: {tp2_r}R ({tp2:.5f})"
+                            # Short simple ID
+                            signal_id = f"{sym.replace('_','')}{tf}{int(time.time()) % 10000}"
 
-                            if 'tp3' in setup:
-                                tp3 = setup['tp3']
-                                tp3_r = setup.get('tp3_r', 4.8)
-                                msg += f"\nTP3: {tp3_r}R ({tp3:.5f})"
+                            # Log signal
+                            tracker.log_signal(signal_id, sym, direction, entry, sl, tp1, tp2, tp3, score, tf)
 
-                            msg += f"\n({prob_label} {score}%) {tf}\nMonitor CHOCH for exit"
+                            msg = (
+                                f"{sym} {direction} @ {entry:.5f}\n"
+                                f"SL: {sl:.5f}\n"
+                                f"TP1: {tp1_r}R ({tp1:.5f})\n"
+                                f"TP2: {tp2_r}R ({tp2:.5f})\n"
+                                f"TP3: {tp3_r}R ({tp3:.5f})\n"
+                                f"({prob_label} {score}%) {tf}\n"
+                                f"#{signal_id}\n"
+                                f"Monitor CHOCH for exit"
+                            )
 
                             key = f"{sym}_{tf}"
                             if key not in sent_signals or time.time() - sent_signals[key] > COOLDOWN_MIN * 60:
                                 send_telegram_message(msg)
                                 sent_signals[key] = time.time()
-                                logger.info(f"Signal sent: {msg}")
+                                logger.info(f"Signal sent: #{signal_id}")
                 except Exception as e:
                     logger.error(f"Error processing {sym} {tf}: {e}")
 
-def daily_summary():
-    msg = f"Daily SMC Summary (WAT) - {datetime.now().strftime('%Y-%m-%d')}\nNo signals today."
-    send_telegram_message(msg)
+def send_monthly_report():
+    report = tracker.get_monthly_report()
+    send_telegram_message("\ud83d\udcca Monthly Performance Report\n" + report)
 
 def run_scheduler():
     schedule.every(60).seconds.do(generate_signals)
-    schedule.every().day.at("23:00").do(daily_summary)
+    schedule.every().day.at("00:05").do(send_monthly_report)  # 1st of month approx
     while True:
         schedule.run_pending()
         time.sleep(30)
@@ -116,8 +173,6 @@ def start_bot():
         if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
             startup_msg = "🚀 SMC Powerhouse Bot started successfully!\nMonitoring markets for A/A+ setups..."
             send_telegram_message(startup_msg)
-        else:
-            logger.warning("Skipping Telegram startup message (credentials missing)")
 
         scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
         scheduler_thread.start()
