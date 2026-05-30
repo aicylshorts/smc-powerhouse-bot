@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone
 import schedule
 import requests
+from dotenv import load_dotenv
 
 import tracker
 
@@ -40,31 +41,20 @@ def get_trading_session():
         return 'Late NY / Asian'
 
 def calculate_risk_per_lot(sl_price, entry_price, symbol):
-    '''Rough estimation of risk per 0.01 lot'''
     sl_distance = abs(sl_price - entry_price)
-
-    # Rough estimates (adjust based on your broker)
     if 'XAU' in symbol or 'XAG' in symbol:
-        # Gold/Silver: ~$0.10 per pip per 0.01 lot (simplified)
-        risk_per_0_01 = round(sl_distance * 10, 2)  # rough
-    else:
-        # Forex majors: ~$0.10 per pip per 0.01 lot
         risk_per_0_01 = round(sl_distance * 10, 2)
-
+    else:
+        risk_per_0_01 = round(sl_distance * 10, 2)
     return risk_per_0_01
 
 def is_high_impact_news_time():
-    '''Simple news filter - avoid trading around major news'''
-    # You can expand this later with real economic calendar
     hour = datetime.now(timezone.utc).hour
     minute = datetime.now(timezone.utc).minute
-
-    # Example: Avoid around 14:30 UTC (common for US data)
     if hour == 14 and 20 <= minute <= 40:
         return True
-    if hour == 15 and minute <= 10:  # buffer after
+    if hour == 15 and minute <= 10:
         return True
-
     return False
 
 def send_telegram_message(message):
@@ -160,7 +150,6 @@ def generate_signals():
                     if setup:
                         score = setup.get('score', 0)
                         if score >= PROB_THRESHOLD_A:
-                            # Skip if high impact news window
                             if high_news:
                                 continue
 
