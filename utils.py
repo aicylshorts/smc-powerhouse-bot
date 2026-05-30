@@ -61,10 +61,10 @@ def detect_breaker_block(df: pd.DataFrame, direction: str, lookback=20):
 
 def calculate_confluence_score(sweep=False, fvg=False, ob=False, bos=False, displacement=False, htf_alignment=False, ob_mitigated=False, real_sweep=False, mss=False, breaker=False, fvg_mitigated=False):
     score = 0
-    if sweep: score += 16
-    if fvg: score += 15
+    if sweep: score += 15
+    if fvg: score += 14
     if fvg_mitigated: score += 8
-    if ob: score += 18
+    if ob: score += 17
     if ob_mitigated: score += 8
     if real_sweep: score += 12
     if mss: score += 12
@@ -98,7 +98,6 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str, htf_df: pd.DataFram
     has_bullish_fvg = any(f['type'] == 'bullish' for f in fvgs)
     has_bearish_fvg = any(f['type'] == 'bearish' for f in fvgs)
 
-    # Simple FVG mitigation check
     fvg_mitigated_bullish = False
     fvg_mitigated_bearish = False
     if has_bullish_fvg:
