@@ -7,22 +7,47 @@ import schedule
 
 from flask import Flask
 from dotenv import load_dotenv
-import telegram
 
-from config import ASSETS, TIMEFRAMES, POLL_INTERVAL_SEC, COOLDOWN_MIN, PROB_THRESHOLD_A, PROB_THRESHOLD_AP
-
-from data_fetcher import get_oanda_candles, get_binance_candles
-from utils import detect_smc_setup
+# Use the recommended import style for python-telegram-bot v20+
+try:
+    from telegram import Bot
+    from telegram.error import TelegramError
+except ImportError:
+    import telegram
+    Bot = telegram.Bot
+    TelegramError = Exception
 
 load_dotenv()
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-bot = telegram.Bot(token=os.getenv('TELEGRAM_TOKEN'))
-chat_id = os.getenv('TELEGRAM_CHAT_ID')
+# Read env vars early
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+OANDA_TOKEN = os.getenv('OANDA_TOKEN')
+
+# Basic validation with clear logs
+if not TELEGRAM_TOKEN:
+    logger.error("❌ TELEGRAM_TOKEN is missing! Add it in Render Environment Variables.")
+if not TELEGRAM_CHAT_ID:
+    logger.error("❌ TELEGRAM_CHAT_ID is missing! Add it in Render Environment Variables (must be numeric chat ID).")
+
+bot = None
+chat_id = None
+
+if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+    try:
+        bot = Bot(token=TELEGRAM_TOKEN)
+        chat_id = TELEGRAM_CHAT_ID.strip() if isinstance(TELEGRAM_CHAT_ID, str) else TELEGRAM_CHAT_ID
+        logger.info("✅ Telegram Bot initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize Telegram Bot: {e}")
+else:
+    logger.warning("⚠️ Telegram credentials missing — startup message and signals will be disabled until set.")
 
 sent_signals = {}
 
@@ -35,17 +60,21 @@ def health():
     return 'OK', 200
 
 def send_telegram_message(message):
+    if bot is None or chat_id is None:
+        logger.warning("Telegram not configured — message not sent.")
+        return
     try:
         bot.send_message(chat_id=chat_id, text=message)
+    except TelegramError as e:
+        logger.error(f"❌ Telegram send failed: {e}")
     except Exception as e:
-        logging.error(f"Failed to send Telegram message: {e}")
+        logger.error(f"❌ Unexpected error sending Telegram message: {e}")
 
 def is_high_impact_news(symbol):
-    # Placeholder - expand with free news API later
     return False
 
 def generate_signals():
-    logging.info("Scanning for SMC setups...")
+    logger.info("Scanning for SMC setups...")
     for broker, symbols in ASSETS.items():
         for sym in symbols:
             for tf in TIMEFRAMES:
@@ -71,41 +100,44 @@ def generate_signals():
                             if key not in sent_signals or time.time() - sent_signals[key] > COOLDOWN_MIN * 60:
                                 send_telegram_message(msg)
                                 sent_signals[key] = time.time()
-                                logging.info(f"Signal sent: {msg}")
+                                logger.info(f"Signal sent: {msg}")
                 except Exception as e:
-                    logging.error(f"Error processing {sym} {tf}: {e}")
+                    logger.error(f"Error processing {sym} {tf}: {e}")
 
 def daily_summary():
     msg = f"Daily SMC Summary (WAT) - {datetime.now().strftime('%Y-%m-%d')}\nNo signals today."
-    # TODO: improve summary with actual count
     send_telegram_message(msg)
 
 def run_scheduler():
     schedule.every(POLL_INTERVAL_SEC).seconds.do(generate_signals)
-    schedule.every().day.at("23:00").do(daily_summary)  # Midnight WAT approx
+    schedule.every().day.at("23:00").do(daily_summary)
     while True:
         schedule.run_pending()
         time.sleep(30)
 
 def start_bot():
     try:
-        # Send startup message
-        startup_msg = "🚀 SMC Powerhouse Bot started successfully!\nMonitoring markets for A/A+ setups..."
-        send_telegram_message(startup_msg)
-        logging.info("Startup message sent to Telegram")
-        
-        # Start scheduler in background thread
+        if bot and chat_id:
+            startup_msg = "🚀 SMC Powerhouse Bot started successfully!\nMonitoring markets for A/A+ setups..."
+            send_telegram_message(startup_msg)
+            logger.info("✅ Startup message sent to Telegram")
+        else:
+            logger.warning("⚠️ Skipping startup message — Telegram not configured.")
+
         scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
         scheduler_thread.start()
-        logging.info("Scheduler started in background thread")
-        
-        logging.info("Bot is now running 24/7")
+        logger.info("✅ Scheduler started in background thread")
+        logger.info("✅ Bot is now running 24/7")
     except Exception as e:
-        logging.error(f"Error starting bot: {e}")
+        logger.error(f"Error in start_bot: {e}")
 
 if __name__ == "__main__":
-    logging.info("✅ Environment variables loaded successfully")
+    from config import ASSETS, TIMEFRAMES, POLL_INTERVAL_SEC, COOLDOWN_MIN, PROB_THRESHOLD_A, PROB_THRESHOLD_AP
+    from data_fetcher import get_oanda_candles, get_binance_candles
+    from utils import detect_smc_setup
+
+    logger.info("✅ Environment variables loaded successfully")
     start_bot()
     port = int(os.environ.get('PORT', 5000))
-    logging.info(f"Starting Flask server on port {port}")
+    logger.info(f"Starting Flask server on port {port}")
     app.run(host='0.0.0.0', port=port)
