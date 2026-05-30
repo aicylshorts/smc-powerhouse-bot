@@ -143,7 +143,7 @@ def generate_signals():
     check_telegram_commands()
 
     from config import ASSETS, TIMEFRAMES, POLL_INTERVAL_SEC, COOLDOWN_MIN, PROB_THRESHOLD_A, PROB_THRESHOLD_AP
-    from data_fetcher import get_oanda_candles, get_binance_candles, get_finnhub_candles
+    from data_fetcher import get_oanda_candles, get_binance_candles, get_finnhub_candles, get_yfinance_candles
     from utils import detect_smc_setup
 
     current_session = get_trading_session()
@@ -152,24 +152,31 @@ def generate_signals():
     for broker, symbols in ASSETS.items():
         for sym in symbols:
             for tf in TIMEFRAMES:
+                df = None
+                htf_df = None
+
                 try:
                     if broker == 'OANDA':
                         df = get_oanda_candles(sym, tf)
                         htf_tf = '1h' if tf == '15m' else ('4h' if tf == '1h' else None)
                         htf_df = get_oanda_candles(sym, htf_tf) if htf_tf else None
 
+                        # Fallback to yfinance if OANDA fails
+                        if df is None or len(df) < 50:
+                            yf_symbol = sym.replace('_', '') + '=X'
+                            df = get_yfinance_candles(yf_symbol, interval=tf)
+
+                    elif broker == 'FINNHUB':
+                        finnhub_res = '15' if tf == '15m' else ('60' if tf == '1h' else '240')
+                        df = get_finnhub_candles(sym, resolution=finnhub_res)
+
+                        if df is None or len(df) < 50:
+                            yf_symbol = sym.split(':')[-1].replace('_', '') + '=X'
+                            df = get_yfinance_candles(yf_symbol, interval=tf)
+
                     elif broker == 'BINANCE':
                         df = get_binance_candles(sym, tf)
                         htf_df = None
-
-                    elif broker == 'FINNHUB':
-                        # Convert timeframe for Finnhub
-                        finnhub_res = '15' if tf == '15m' else ('60' if tf == '1h' else '240')
-                        df = get_finnhub_candles(sym, resolution=finnhub_res)
-                        htf_df = None
-
-                    else:
-                        continue
 
                     if df is None or len(df) < 50:
                         continue
