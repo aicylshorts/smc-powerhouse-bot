@@ -99,7 +99,6 @@ def get_finnhub_candles(symbol, resolution='15', count=300):
 
 
 def get_twelve_data_candles(symbol, interval='15min', outputsize=300):
-    '''Twelve Data as backup source'''
     token = os.getenv('TWELVE_DATA_TOKEN')
     if not token:
         print("TWELVE_DATA_TOKEN not set")
@@ -143,6 +142,33 @@ def get_yfinance_candles(symbol, period='5d', interval='15m'):
         return df
     except Exception as e:
         print(f'yfinance error for {symbol}: {e}')
+        return pd.DataFrame()
+
+
+def get_coingecko_candles(coin_id, vs_currency='usd', days=5):
+    '''Free public CoinGecko API as crypto backup (no key needed)'''
+    url = f'https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency={vs_currency}&days={days}'
+
+    try:
+        resp = _make_request_with_retry(url)
+        if resp is None:
+            return pd.DataFrame()
+
+        data = resp.json()
+        if 'prices' not in data:
+            return pd.DataFrame()
+
+        prices = data['prices']
+        df = pd.DataFrame(prices, columns=['timestamp', 'close'])
+        df['time'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df.set_index('time', inplace=True)
+        df['open'] = df['close']
+        df['high'] = df['close']
+        df['low'] = df['close']
+        return df[['open', 'high', 'low', 'close']]
+
+    except Exception as e:
+        print(f'CoinGecko error for {coin_id}: {e}')
         return pd.DataFrame()
 
 
