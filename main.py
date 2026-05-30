@@ -28,6 +28,17 @@ else:
 sent_signals = {}
 last_update_id = 0
 
+def self_ping():
+    '''Self-ping to keep the free tier instance awake'''
+    port = os.environ.get('PORT', '10000')
+    url = f'http://127.0.0.1:{port}/health'
+    while True:
+        try:
+            requests.get(url, timeout=5)
+        except:
+            pass
+        time.sleep(280)  # Ping every ~4.5 minutes
+
 def get_trading_session():
     hour = datetime.now(timezone.utc).hour
     if 0 <= hour < 8:
@@ -215,10 +226,15 @@ def start_bot():
             startup_msg = '🚀 SMC Powerhouse Bot started successfully!\nMonitoring markets for A/A+ setups...'
             send_telegram_message(startup_msg)
 
+        # Start self-ping thread to keep free tier awake
+        ping_thread = threading.Thread(target=self_ping, daemon=True)
+        ping_thread.start()
+        logger.info('✅ Self-ping started (keeps instance awake)')
+
         scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
         scheduler_thread.start()
-        logger.info('Scheduler started')
-        logger.info('Bot running 24/7')
+        logger.info('✅ Scheduler started')
+        logger.info('✅ Bot running 24/7')
     except Exception as e:
         logger.error(f'start_bot error: {e}')
 
