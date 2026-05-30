@@ -55,7 +55,6 @@ def health():
 
 def generate_signals():
     logger.info("Scanning for SMC setups...")
-    # (rest of scanning logic stays the same - using existing functions)
     from config import ASSETS, TIMEFRAMES, POLL_INTERVAL_SEC, COOLDOWN_MIN, PROB_THRESHOLD_A, PROB_THRESHOLD_AP
     from data_fetcher import get_oanda_candles, get_binance_candles
     from utils import detect_smc_setup
@@ -79,8 +78,20 @@ def generate_signals():
                             sl = setup['sl']
                             tp1 = setup['tp1']
                             tp2 = setup['tp2']
+                            tp1_r = setup.get('tp1_r', 1.6)
+                            tp2_r = setup.get('tp2_r', 3.0)
                             prob_label = 'A+' if score >= PROB_THRESHOLD_AP else 'A'
-                            msg = f"{sym} {direction} @ {entry:.5f} SL:{sl:.5f} TP1:{tp1:.5f} TP2:{tp2:.5f} ({prob_label} {score}%) {tf}\nMonitor CHOCH for exit"
+
+                            # Build message with RR + actual prices
+                            msg = f"{sym} {direction} @ {entry:.5f}\nSL: {sl:.5f}\nTP1: {tp1_r}R ({tp1:.5f})\nTP2: {tp2_r}R ({tp2:.5f})"
+
+                            if 'tp3' in setup:
+                                tp3 = setup['tp3']
+                                tp3_r = setup.get('tp3_r', 4.8)
+                                msg += f"\nTP3: {tp3_r}R ({tp3:.5f})"
+
+                            msg += f"\n({prob_label} {score}%) {tf}\nMonitor CHOCH for exit"
+
                             key = f"{sym}_{tf}"
                             if key not in sent_signals or time.time() - sent_signals[key] > COOLDOWN_MIN * 60:
                                 send_telegram_message(msg)
