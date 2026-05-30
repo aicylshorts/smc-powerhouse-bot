@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import schedule
 import requests
 from dotenv import load_dotenv
+from flask import Flask
 
 import tracker
 
@@ -144,12 +145,11 @@ def generate_signals():
                 try:
                     if broker == 'OANDA':
                         df = get_oanda_candles(sym, tf)
-                        # Automatic Higher Timeframe data for MTF confirmation
                         htf_tf = '1h' if tf == '15m' else ('4h' if tf == '1h' else None)
                         htf_df = get_oanda_candles(sym, htf_tf) if htf_tf else None
                     else:
                         df = get_binance_candles(sym, tf)
-                        htf_df = None  # Binance MTF can be added later
+                        htf_df = None
 
                     if df is None or len(df) < 50:
                         continue
