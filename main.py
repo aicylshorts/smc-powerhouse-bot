@@ -5,10 +5,6 @@ import logging
 from datetime import datetime
 import schedule
 import requests
-import json
-
-from flask import Flask
-from dotenv import load_dotenv
 
 import tracker
 
@@ -23,84 +19,83 @@ TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
 if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-    logger.error("❌ Missing TELEGRAM_TOKEN or TELEGRAM_CHAT_ID!")
+    logger.error('Missing TELEGRAM_TOKEN or TELEGRAM_CHAT_ID!')
 else:
-    logger.info("✅ Telegram credentials loaded")
+    logger.info('Telegram credentials loaded')
 
 sent_signals = {}
-last_update_id = 0   # For Telegram getUpdates
+last_update_id = 0
 
 def send_telegram_message(message):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         return
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
+    url = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage'
+    payload = {'chat_id': TELEGRAM_CHAT_ID, 'text': message, 'parse_mode': 'HTML'}
     try:
         requests.post(url, json=payload, timeout=10)
     except Exception as e:
-        logger.error(f"Telegram send error: {e}")
+        logger.error(f'Telegram send error: {e}')
 
 def check_telegram_commands():
     global last_update_id
     if not TELEGRAM_TOKEN:
         return
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?offset={last_update_id + 1}&timeout=5"
+    url = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?offset={last_update_id + 1}&timeout=5'
     try:
         resp = requests.get(url, timeout=10).json()
-        for update in resp.get("result", []):
-            last_update_id = update["update_id"]
-            message = update.get("message", {})
-            text = message.get("text", "")
-            if text.startswith("/"):
+        for update in resp.get('result', []):
+            last_update_id = update['update_id']
+            message = update.get('message', {})
+            text = message.get('text', '')
+            if text.startswith('/'):
                 handle_command(text)
-    except Exception as e:
-        pass  # Silent fail on free tier
+    except:
+        pass
 
 def handle_command(text):
     parts = text.strip().split()
     cmd = parts[0].lower()
 
-    if cmd == "/stats":
+    if cmd == '/stats':
         report = tracker.get_monthly_report()
         send_telegram_message(report)
         return
 
     if len(parts) < 2:
         return
+    signal_id = parts[1].replace('#', '')
 
-    signal_id = parts[1].replace("#", "")
-
-    if cmd == "/win" and len(parts) >= 3:
+    if cmd == '/win' and len(parts) >= 3:
         try:
-            rr = float(parts[2].replace("R", ""))
+            rr = float(parts[2].replace('R', ''))
         except:
             rr = None
-        tracker.record_outcome(signal_id, "WIN", rr)
-        send_telegram_message(f"✅ Recorded WIN for #{signal_id}")
+        tracker.record_outcome(signal_id, 'WIN', rr)
+        send_telegram_message(f'Recorded WIN for #{signal_id}')
 
-    elif cmd == "/loss":
-        tracker.record_outcome(signal_id, "LOSS")
-        send_telegram_message(f"✅ Recorded LOSS for #{signal_id}")
+    elif cmd == '/loss':
+        tracker.record_outcome(signal_id, 'LOSS')
+        send_telegram_message(f'Recorded LOSS for #{signal_id}')
 
-    elif cmd == "/be":
-        tracker.record_outcome(signal_id, "BE")
-        send_telegram_message(f"✅ Recorded Breakeven for #{signal_id}")
+    elif cmd == '/be':
+        tracker.record_outcome(signal_id, 'BE')
+        send_telegram_message(f'Recorded Breakeven for #{signal_id}')
 
-    elif cmd == "/notrade":
-        tracker.record_outcome(signal_id, "NO_TRADE")
-        send_telegram_message(f"✅ Marked as NO TRADE for #{signal_id}")
+    elif cmd == '/notrade':
+        tracker.record_outcome(signal_id, 'NO_TRADE')
+        send_telegram_message(f'Marked as NO TRADE for #{signal_id}')
 
 @app.route('/')
 def home():
-    return "SMC Powerhouse Bot is running! ✅"
+    return 'SMC Powerhouse Bot is running!'
 
 @app.route('/health')
 def health():
     return 'OK', 200
 
 def generate_signals():
-    logger.info("Scanning for SMC setups...")
-    check_telegram_commands()  # Check for commands
+    logger.info('Scanning for SMC setups...')
+    check_telegram_commands()
 
     from config import ASSETS, TIMEFRAMES, POLL_INTERVAL_SEC, COOLDOWN_MIN, PROB_THRESHOLD_A, PROB_THRESHOLD_AP
     from data_fetcher import get_oanda_candles, get_binance_candles
@@ -133,37 +128,35 @@ def generate_signals():
                             prob_label = 'A+' if score >= PROB_THRESHOLD_AP else 'A'
 
                             # Short simple ID
-                            signal_id = f"{sym.replace('_','')}{tf}{int(time.time()) % 10000}"
+                            short_sym = sym.replace('_', '')[:6]
+                            signal_id = f'{short_sym}{int(time.time()) % 10000}'
 
-                            # Log signal
                             tracker.log_signal(signal_id, sym, direction, entry, sl, tp1, tp2, tp3, score, tf)
 
-                            msg = (
-                                f"{sym} {direction} @ {entry:.5f}\n"
-                                f"SL: {sl:.5f}\n"
-                                f"TP1: {tp1_r}R ({tp1:.5f})\n"
-                                f"TP2: {tp2_r}R ({tp2:.5f})\n"
-                                f"TP3: {tp3_r}R ({tp3:.5f})\n"
-                                f"({prob_label} {score}%) {tf}\n"
-                                f"#{signal_id}\n"
-                                f"Monitor CHOCH for exit"
-                            )
+                            msg = (f'{sym} {direction} @ {entry:.5f}\n'
+                                   f'SL: {sl:.5f}\n'
+                                   f'TP1: {tp1_r}R ({tp1:.5f})\n'
+                                   f'TP2: {tp2_r}R ({tp2:.5f})\n'
+                                   f'TP3: {tp3_r}R ({tp3:.5f})\n'
+                                   f'({prob_label} {score}%) {tf}\n'
+                                   f'#{signal_id}\n'
+                                   f'Monitor CHOCH for exit')
 
-                            key = f"{sym}_{tf}"
+                            key = f'{sym}_{tf}'
                             if key not in sent_signals or time.time() - sent_signals[key] > COOLDOWN_MIN * 60:
                                 send_telegram_message(msg)
                                 sent_signals[key] = time.time()
-                                logger.info(f"Signal sent: #{signal_id}")
+                                logger.info(f'Signal sent: #{signal_id}')
                 except Exception as e:
-                    logger.error(f"Error processing {sym} {tf}: {e}")
+                    logger.error(f'Error processing {sym} {tf}: {e}')
 
 def send_monthly_report():
     report = tracker.get_monthly_report()
-    send_telegram_message("\ud83d\udcca Monthly Performance Report\n" + report)
+    send_telegram_message('📊 Monthly Performance Report\n' + report)
 
 def run_scheduler():
     schedule.every(60).seconds.do(generate_signals)
-    schedule.every().day.at("00:05").do(send_monthly_report)  # 1st of month approx
+    schedule.every().day.at('00:05').do(send_monthly_report)
     while True:
         schedule.run_pending()
         time.sleep(30)
@@ -171,18 +164,18 @@ def run_scheduler():
 def start_bot():
     try:
         if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
-            startup_msg = "🚀 SMC Powerhouse Bot started successfully!\nMonitoring markets for A/A+ setups..."
+            startup_msg = '🚀 SMC Powerhouse Bot started successfully!\nMonitoring markets for A/A+ setups...'
             send_telegram_message(startup_msg)
 
         scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
         scheduler_thread.start()
-        logger.info("✅ Scheduler started")
-        logger.info("✅ Bot running 24/7")
+        logger.info('Scheduler started')
+        logger.info('Bot running 24/7')
     except Exception as e:
-        logger.error(f"start_bot error: {e}")
+        logger.error(f'start_bot error: {e}')
 
-if __name__ == "__main__":
-    logger.info("✅ Starting SMC Powerhouse Bot...")
+if __name__ == '__main__':
+    logger.info('Starting SMC Powerhouse Bot...')
     start_bot()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
