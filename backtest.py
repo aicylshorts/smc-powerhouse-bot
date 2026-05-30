@@ -9,9 +9,16 @@ load_dotenv()
 
 OANDA_TOKEN = os.getenv('OANDA_TOKEN')
 
+PAIRS_TO_TEST = [
+    'XAU_USD',
+    'EUR_USD',
+    'GBP_USD',
+    'USD_JPY',
+    'NAS100_USD'
+]
+
 
 def fetch_historical_data(instrument, granularity='M15', days=30):
-    '''Fetch historical candles from OANDA Practice'''
     url = f'https://api-fxtrade-practice.oanda.com/v3/instruments/{instrument}/candles'
     headers = {
         'Authorization': f'Bearer {OANDA_TOKEN}',
@@ -34,7 +41,6 @@ def fetch_historical_data(instrument, granularity='M15', days=30):
         data = resp.json().get('candles', [])
 
         if not data:
-            print("No data returned from OANDA.")
             return pd.DataFrame()
 
         df = pd.DataFrame([{
@@ -49,23 +55,16 @@ def fetch_historical_data(instrument, granularity='M15', days=30):
         return df
 
     except Exception as e:
-        print(f"Error fetching data: {e}")
+        print(f"Error fetching {instrument}: {e}")
         return pd.DataFrame()
 
 
-def run_backtest(instrument='XAU_USD', granularity='M15', days=30):
-    print(f"\n=== Backtesting {instrument} on {granularity} for last {days} days ===\n")
-
+def run_single_backtest(instrument, granularity='M15', days=30):
     df = fetch_historical_data(instrument, granularity, days)
     if df.empty:
-        print("No data available for backtest.")
-        return
+        return None
 
     trades = []
-    equity = 1000
-    peak = equity
-    max_drawdown = 0
-
     for i in range(50, len(df)):
         window = df.iloc[:i+1]
         setup = detect_smc_setup(window, instrument, granularity)
@@ -75,7 +74,6 @@ def run_backtest(instrument='XAU_USD', granularity='M15', days=30):
             entry = setup['entry']
             sl = setup['sl']
             tp2 = setup['tp2']
-            score = setup['score']
 
             future = df.iloc[i+1:]
 
@@ -89,49 +87,51 @@ def run_backtest(instrument='XAU_USD', granularity='M15', days=30):
             if not hit_tp.empty and (hit_sl.empty or hit_tp.index[0] < hit_sl.index[0]):
                 result = 'WIN'
                 rr = 3.0
-                equity += (equity * 0.01 * rr)
             else:
                 result = 'LOSS'
                 rr = -1.0
-                equity += (equity * 0.01 * rr)
 
-            peak = max(peak, equity)
-            drawdown = (peak - equity) / peak
-            max_drawdown = max(max_drawdown, drawdown)
-
-            trades.append({
-                'time': df.index[i],
-                'direction': direction,
-                'entry': entry,
-                'sl': sl,
-                'tp2': tp2,
-                'score': score,
-                'result': result,
-                'rr': rr
-            })
+            trades.append({'result': result, 'rr': rr})
 
     if not trades:
-        print("No trades generated during backtest period.")
-        return
+        return None
 
     df_trades = pd.DataFrame(trades)
     wins = len(df_trades[df_trades['result'] == 'WIN'])
-    losses = len(df_trades[df_trades['result'] == 'LOSS'])
-    win_rate = (wins / len(df_trades)) * 100 if trades else 0
-
+    total = len(df_trades)
+    win_rate = (wins / total) * 100
     avg_rr = df_trades['rr'].mean()
-    profit_factor = abs(df_trades[df_trades['rr'] > 0]['rr'].sum() / df_trades[df_trades['rr'] < 0]['rr'].sum()) if losses > 0 else float('inf')
 
-    print(f"Total Trades: {len(trades)}")
-    print(f"Wins: {wins} | Losses: {losses}")
-    print(f"Win Rate: {win_rate:.2f}%")
-    print(f"Average RR: {avg_rr:.2f}")
-    print(f"Profit Factor: {profit_factor:.2f}")
-    print(f"Max Drawdown: {max_drawdown*100:.2f}%")
-    print(f"Final Equity (simulated 1% risk): ${equity:.2f}")
+    return {
+        'pair': instrument,
+        'trades': total,
+        'wins': wins,
+        'win_rate': round(win_rate, 2),
+        'avg_rr': round(avg_rr, 2)
+    }
 
-    return df_trades
 
+def run_full_backtest(days=30):
+    print(f"\n{'='*60}")
+    print(f"BACKTEST RESULTS - Last {days} days")
+    print(f"{'='*60}\n")
+
+    results = []
+    for pair in PAIRS_TO_TEST:
+        print(f"Testing {pair}...", end=" ")
+        result = run_single_backtest(pair, days=days)
+        if result:
+            results.append(result)
+            print(f"Trades: {result['trades']} | Win Rate: {result['win_rate']}% | Avg RR: {result['avg_rr']}")
+        else:
+            print("No trades or data.")
+
+    if results:
+        print(f"\n{'='*60}")
+        print("SUMMARY")
+        print(f"{'='*60}")
+        for r in results:
+            print(f"{r['pair']}: {r['trades']} trades | {r['win_rate']}% WR | {r['avg_rr']} Avg RR")
 
 if __name__ == "__main__":
-    run_backtest(instrument='XAU_USD', granularity='M15', days=60)
+    run_full_backtest(days=45)
