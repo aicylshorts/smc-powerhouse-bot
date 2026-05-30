@@ -13,7 +13,6 @@ def _map_oanda_granularity(tf: str) -> str:
     return mapping.get(tf, tf)
 
 def _make_request_with_retry(url, headers=None, params=None, max_retries=3, backoff=2):
-    '''Make HTTP request with retry and exponential backoff'''
     for attempt in range(max_retries):
         try:
             resp = requests.get(url, headers=headers, params=params, timeout=12)
@@ -22,8 +21,9 @@ def _make_request_with_retry(url, headers=None, params=None, max_retries=3, back
         except Exception as e:
             if attempt == max_retries - 1:
                 raise e
-            time.sleep(backoff ** attempt)  # 2s, 4s, 8s...
+            time.sleep(backoff ** attempt)
     return None
+
 
 def get_oanda_candles(instrument, granularity='M15', count=300):
     url = f'https://api-fxtrade-practice.oanda.com/v3/instruments/{instrument}/candles'
@@ -54,6 +54,43 @@ def get_oanda_candles(instrument, granularity='M15', count=300):
 
     except Exception as e:
         print(f'OANDA error for {instrument} ({granularity}): {e}')
+        return pd.DataFrame()
+
+
+def get_finnhub_candles(symbol, resolution='15', count=300):
+    '''Fetch candles from Finnhub (free tier)'''
+    token = os.getenv('FINNHUB_TOKEN')
+    if not token:
+        print("FINNHUB_TOKEN not set")
+        return pd.DataFrame()
+
+    # Finnhub uses Unix timestamps
+    to_time = int(time.time())
+    from_time = to_time - (count * 900)  # rough estimate for 15m
+
+    url = f'https://finnhub.io/api/v1/forex/candle?symbol={symbol}&resolution={resolution}&from={from_time}&to={to_time}&token={token}'
+
+    try:
+        resp = _make_request_with_retry(url)
+        if resp is None:
+            return pd.DataFrame()
+
+        data = resp.json()
+        if data.get('s') != 'ok':
+            return pd.DataFrame()
+
+        df = pd.DataFrame({
+            'time': pd.to_datetime(data['t'], unit='s'),
+            'open': data['o'],
+            'high': data['h'],
+            'low': data['l'],
+            'close': data['c']
+        })
+        df.set_index('time', inplace=True)
+        return df
+
+    except Exception as e:
+        print(f'Finnhub error for {symbol}: {e}')
         return pd.DataFrame()
 
 
