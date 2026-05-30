@@ -27,7 +27,6 @@ sent_signals = {}
 last_update_id = 0
 
 def get_trading_session():
-    '''Return current trading session based on UTC time'''
     hour = datetime.now(timezone.utc).hour
     if 0 <= hour < 8:
         return 'Asian'
@@ -146,7 +145,7 @@ def generate_signals():
                             short_sym = sym.replace('_', '')[:6]
                             signal_id = f'{short_sym}{int(time.time()) % 10000}'
 
-                            tracker.log_signal(signal_id, sym, direction, entry, sl, tp1, tp2, tp3, score, tf)
+                            tracker.log_signal(signal_id, sym, direction, entry, sl, tp1, tp2, tp3, score, tf, current_session)
 
                             msg = (f'{sym} {direction} @ {entry:.5f}\n'
                                    f'SL: {sl:.5f}\n'
