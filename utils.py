@@ -34,23 +34,16 @@ def detect_order_block(df: pd.DataFrame, direction: str, lookback=15):
 
 
 def detect_breaker_block(df: pd.DataFrame, direction: str, lookback=20):
-    '''
-    Breaker Block detection.
-    When an OB is broken and price returns to it from the other side, it becomes a Breaker.
-    '''
     if len(df) < lookback:
         return None
     recent = df.iloc[-lookback:].reset_index(drop=True)
 
     if direction == 'bullish':
         for i in range(len(recent) - 5, 2, -1):
-            # Previous bullish OB that was broken downward
             if recent['close'].iloc[i] < recent['open'].iloc[i]:
                 ob_high = recent['high'].iloc[i]
-                # Later price broke below this OB
                 later_low = recent['low'].iloc[i+2:i+5].min()
                 if later_low < ob_high:
-                    # Now price is coming back from below
                     current_price = recent['close'].iloc[-1]
                     if current_price > ob_high * 0.998:
                         return {'type': 'bullish_breaker', 'level': ob_high}
@@ -66,15 +59,16 @@ def detect_breaker_block(df: pd.DataFrame, direction: str, lookback=20):
     return None
 
 
-def calculate_confluence_score(sweep=False, fvg=False, ob=False, bos=False, displacement=False, htf_alignment=False, ob_mitigated=False, real_sweep=False, mss=False, breaker=False):
+def calculate_confluence_score(sweep=False, fvg=False, ob=False, bos=False, displacement=False, htf_alignment=False, ob_mitigated=False, real_sweep=False, mss=False, breaker=False, fvg_mitigated=False):
     score = 0
-    if sweep: score += 18
-    if fvg: score += 16
-    if ob: score += 20
+    if sweep: score += 16
+    if fvg: score += 15
+    if fvg_mitigated: score += 8
+    if ob: score += 18
     if ob_mitigated: score += 8
     if real_sweep: score += 12
     if mss: score += 12
-    if breaker: score += 15      # Breaker Blocks are high probability
+    if breaker: score += 14
     if displacement: score += 8
     if htf_alignment: score += 8
     if bos: score += 5
@@ -104,6 +98,20 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str, htf_df: pd.DataFram
     has_bullish_fvg = any(f['type'] == 'bullish' for f in fvgs)
     has_bearish_fvg = any(f['type'] == 'bearish' for f in fvgs)
 
+    # Simple FVG mitigation check
+    fvg_mitigated_bullish = False
+    fvg_mitigated_bearish = False
+    if has_bullish_fvg:
+        for fvg in [f for f in fvgs if f['type'] == 'bullish']:
+            if fvg['low'] <= close <= fvg['high']:
+                fvg_mitigated_bullish = True
+                break
+    if has_bearish_fvg:
+        for fvg in [f for f in fvgs if f['type'] == 'bearish']:
+            if fvg['low'] <= close <= fvg['high']:
+                fvg_mitigated_bearish = True
+                break
+
     if sweep_bullish and has_bullish_fvg:
         direction = 'BUY'
         entry = close
@@ -126,9 +134,12 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str, htf_df: pd.DataFram
             if close > htf_recent['close'].iloc[0]:
                 htf_alignment = True
 
+        fvg_mitigated = fvg_mitigated_bullish
+
         score = calculate_confluence_score(
-            sweep=True, fvg=True, ob=has_ob, ob_mitigated=ob_mitigated,
-            real_sweep=real_sweep_bullish, mss=mss, breaker=has_breaker,
+            sweep=True, fvg=True, fvg_mitigated=fvg_mitigated,
+            ob=has_ob, ob_mitigated=ob_mitigated, breaker=has_breaker,
+            real_sweep=real_sweep_bullish, mss=mss,
             displacement=displacement, htf_alignment=htf_alignment
         )
 
@@ -154,9 +165,12 @@ def detect_smc_setup(df: pd.DataFrame, symbol: str, tf: str, htf_df: pd.DataFram
             if close < htf_recent['close'].iloc[0]:
                 htf_alignment = True
 
+        fvg_mitigated = fvg_mitigated_bearish
+
         score = calculate_confluence_score(
-            sweep=True, fvg=True, ob=has_ob, ob_mitigated=ob_mitigated,
-            real_sweep=real_sweep_bearish, mss=mss, breaker=has_breaker,
+            sweep=True, fvg=True, fvg_mitigated=fvg_mitigated,
+            ob=has_ob, ob_mitigated=ob_mitigated, breaker=has_breaker,
+            real_sweep=real_sweep_bearish, mss=mss,
             displacement=displacement, htf_alignment=htf_alignment
         )
     else:
