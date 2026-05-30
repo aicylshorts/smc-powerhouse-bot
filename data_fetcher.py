@@ -58,15 +58,13 @@ def get_oanda_candles(instrument, granularity='M15', count=300):
 
 
 def get_finnhub_candles(symbol, resolution='15', count=300):
-    '''Fetch candles from Finnhub (free tier)'''
     token = os.getenv('FINNHUB_TOKEN')
     if not token:
         print("FINNHUB_TOKEN not set")
         return pd.DataFrame()
 
-    # Finnhub uses Unix timestamps
     to_time = int(time.time())
-    from_time = to_time - (count * 900)  # rough estimate for 15m
+    from_time = to_time - (count * 900)
 
     url = f'https://finnhub.io/api/v1/forex/candle?symbol={symbol}&resolution={resolution}&from={from_time}&to={to_time}&token={token}'
 
@@ -76,7 +74,10 @@ def get_finnhub_candles(symbol, resolution='15', count=300):
             return pd.DataFrame()
 
         data = resp.json()
+
+        # Finnhub specific error handling
         if data.get('s') != 'ok':
+            print(f"Finnhub returned no data for {symbol}")
             return pd.DataFrame()
 
         df = pd.DataFrame({
