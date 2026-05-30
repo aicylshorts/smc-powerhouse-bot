@@ -4,21 +4,17 @@ import pandas as pd
 from datetime import datetime
 
 def _map_oanda_granularity(tf: str) -> str:
-    """Map common TF strings to OANDA granularity."""
     mapping = {
         '15m': 'M15',
         '1h': 'H1',
         '4h': 'H4',
         '1d': 'D',
-        'M15': 'M15',
-        'H1': 'H1',
-        'H4': 'H4',
     }
-    return mapping.get(tf, tf)  # fallback to original if unknown
-
+    return mapping.get(tf, tf)
 
 def get_oanda_candles(instrument, granularity='M15', count=300):
-    url = f'https://api-fxtrade.oanda.com/v3/instruments/{instrument}/candles'
+    # Using Practice endpoint (switch to api-fxtrade.oanda.com for live)
+    url = f'https://api-fxtrade-practice.oanda.com/v3/instruments/{instrument}/candles'
     headers = {
         'Authorization': f'Bearer {os.getenv("OANDA_TOKEN")}',
         'Content-Type': 'application/json'
