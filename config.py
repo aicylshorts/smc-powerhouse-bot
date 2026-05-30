@@ -4,17 +4,18 @@ load_dotenv()
 
 ASSETS = {
     'OANDA': [
-        'EUR_USD', 'GBP_USD', 'USD_JPY', 'AUD_USD', 'USD_CAD', 'USD_CHF', 'NZD_USD',
-        'EUR_GBP', 'EUR_JPY', 'EUR_AUD', 'EUR_CAD', 'EUR_NZD', 'EUR_CHF',
-        'GBP_JPY', 'GBP_AUD', 'GBP_CAD', 'GBP_NZD', 'GBP_CHF',
-        'AUD_JPY', 'AUD_CAD', 'AUD_NZD', 'AUD_CHF',
-        'NZD_JPY', 'NZD_CAD', 'NZD_CHF',
-        'CAD_JPY', 'CHF_JPY',
-        'XAU_USD', 'XAG_USD', 'XPT_USD', 'XPD_USD',
-        'NATGAS_USD', 'WTICO_USD', 'BCO_USD',
-        'US30_USD', 'NAS100_USD', 'SPX500_USD', 'UK100_GBP', 'DE30_EUR', 'FR40_EUR', 'JP225_USD'
+        # Core pairs only (reduced to minimize errors)
+        'EUR_USD', 'GBP_USD', 'USD_JPY', 'AUD_USD', 'USD_CAD',
+        'XAU_USD', 'XAG_USD',
+        'NAS100_USD', 'US30_USD'
     ],
-    'BINANCE': ['BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD', 'ADAUSD']
+    'BINANCE': [
+        'BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD', 'ADAUSD', 'BNBUSD'
+    ],
+    'FINNHUB': [
+        'OANDA:EUR_USD', 'OANDA:GBP_USD', 'OANDA:USD_JPY',
+        'OANDA:XAU_USD'
+    ]
 }
 
 TIMEFRAMES = ['15m', '1h', '4h']
@@ -28,10 +29,8 @@ WAT_TZ_OFFSET = 1
 AVOID_NEWS_MINUTES_BEFORE = 30
 AVOID_NEWS_MINUTES_AFTER = 30
 
-# Simple high-impact time windows (UTC hour, minute)
-# You can add more times here
 HIGH_IMPACT_WINDOWS = [
-    (14, 30),   # US data example
+    (14, 30),
 ]
 
 # For Flask
