@@ -1,22 +1,7 @@
-# SMC Powerhouse Bot
+Updated for Render free tier + expanded assets.
 
-Mulham Trading refined Smart Money Concepts (SMC) signal generator.
+Use as Web Service (not Background Worker).
 
-## Features
-- Live A/A+ SMC setups (Liquidity Sweep + FVG + OB + BOS)
-- OANDA for Forex, Metals, Indices (EUR_USD, XAU_USD, US30, NAS100_USD etc.)
-- Binance for Crypto (BTCUSD, ETHUSD, SOLUSD)
-- Telegram alerts
-- Dynamic TP based on probability
-- Daily summary at midnight WAT (UTC+1)
-- High impact news filter (placeholder)
-- Multi-timeframe confluence
+The bot now runs a lightweight Flask server to satisfy Render's port requirement while the SMC scanner runs in background thread.
 
-## Setup
-1. Copy .env.example to .env and fill credentials
-2. `pip install -r requirements.txt`
-3. `python main.py`
-
-Deploy on Render.com as Python Worker.
-
-Assets defined in config.py
+Assets broadened: Many forex pairs + NATGAS_USD + energies + more indices.
