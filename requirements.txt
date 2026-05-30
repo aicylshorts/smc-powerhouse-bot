@@ -2,6 +2,5 @@ requests
 pandas
 numpy
 python-dotenv
-python-telegram-bot
-schedule
 flask
+schedule
