@@ -29,7 +29,6 @@ sent_signals = {}
 last_update_id = 0
 
 def self_ping():
-    '''Self-ping to keep the free tier instance awake'''
     port = os.environ.get('PORT', '10000')
     url = f'http://127.0.0.1:{port}/health'
     while True:
@@ -37,7 +36,7 @@ def self_ping():
             requests.get(url, timeout=5)
         except:
             pass
-        time.sleep(280)  # Ping every ~4.5 minutes
+        time.sleep(280)
 
 def get_trading_session():
     hour = datetime.now(timezone.utc).hour
@@ -144,7 +143,7 @@ def generate_signals():
     check_telegram_commands()
 
     from config import ASSETS, TIMEFRAMES, POLL_INTERVAL_SEC, COOLDOWN_MIN, PROB_THRESHOLD_A, PROB_THRESHOLD_AP
-    from data_fetcher import get_oanda_candles, get_binance_candles
+    from data_fetcher import get_oanda_candles, get_binance_candles, get_finnhub_candles
     from utils import detect_smc_setup
 
     current_session = get_trading_session()
@@ -158,9 +157,19 @@ def generate_signals():
                         df = get_oanda_candles(sym, tf)
                         htf_tf = '1h' if tf == '15m' else ('4h' if tf == '1h' else None)
                         htf_df = get_oanda_candles(sym, htf_tf) if htf_tf else None
-                    else:
+
+                    elif broker == 'BINANCE':
                         df = get_binance_candles(sym, tf)
                         htf_df = None
+
+                    elif broker == 'FINNHUB':
+                        # Convert timeframe for Finnhub
+                        finnhub_res = '15' if tf == '15m' else ('60' if tf == '1h' else '240')
+                        df = get_finnhub_candles(sym, resolution=finnhub_res)
+                        htf_df = None
+
+                    else:
+                        continue
 
                     if df is None or len(df) < 50:
                         continue
@@ -226,7 +235,6 @@ def start_bot():
             startup_msg = '🚀 SMC Powerhouse Bot started successfully!\nMonitoring markets for A/A+ setups...'
             send_telegram_message(startup_msg)
 
-        # Start self-ping thread to keep free tier awake
         ping_thread = threading.Thread(target=self_ping, daemon=True)
         ping_thread.start()
         logger.info('✅ Self-ping started (keeps instance awake)')
