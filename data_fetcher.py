@@ -14,6 +14,11 @@ try:
 except ImportError:
     investpy = None
 
+try:
+    from dukascopy import Dukascopy
+except ImportError:
+    Dukascopy = None
+
 def _clean_ohlc(df):
     if df.empty:
         return df
@@ -47,10 +52,6 @@ def _make_request_with_retry(url, headers=None, params=None, max_retries=3, back
 
 
 def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
-    """
-    Fawaz - Fine-tuned for SMC
-    Spot rates with realistic variation for liquidity & structure detection.
-    """
     if symbols is None:
         symbols = ['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD']
 
@@ -96,9 +97,6 @@ def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
 
 
 def get_investpy_data(name, country=None, product_type='indices', interval='Daily'):
-    """
-    investpy - Fine-tuned + strong fallback for SMC
-    """
     if investpy is None:
         print("investpy not installed")
         return pd.DataFrame()
@@ -142,25 +140,42 @@ def get_investpy_data(name, country=None, product_type='indices', interval='Dail
         return pd.DataFrame()
 
 
-def get_dukascopy_data(symbol, start_date='2024-01-01', end_date=None, timeframe='H1'):
+def get_dukascopy_data(symbol, start_date='2024-01-01', end_date=None, timeframe='M15'):
     """
-    Dukascopy Integration (Initial)
-    Downloads historical data for backtesting and validation.
-    timeframe: 'tick', 'm1', 'm5', 'm15', 'h1', 'd1'
+    Dukascopy Historical Data (Expanded)
+    Priority timeframes: M15 (top), M5
+    Returns clean OHLC DataFrame for backtesting and validation.
     """
+    if Dukascopy is None:
+        print("[Dukascopy] Package not installed. Run: pip install dukascopy")
+        print("[Dukascopy] Falling back to empty DataFrame for now.")
+        return pd.DataFrame()
+
     if end_date is None:
         end_date = pd.Timestamp.now().strftime('%Y-%m-%d')
 
-    print(f"[Dukascopy] Fetching {symbol} {timeframe} from {start_date} to {end_date}...")
+    print(f"[Dukascopy] Downloading {symbol} | {timeframe} | {start_date} to {end_date}")
 
-    # Placeholder - Full implementation requires dukascopy library or direct download
-    # For now we return empty and log. Will be expanded.
     try:
-        # Future: Use dukascopy library or direct HTTP download from Dukascopy historical data
-        print("[Dukascopy] Full download not yet implemented. Returning empty for now.")
-        return pd.DataFrame()
+        client = Dukascopy()
+        df = client.download(
+            symbol=symbol,
+            start=start_date,
+            end=end_date,
+            timeframe=timeframe
+        )
+        if df.empty:
+            print("[Dukascopy] No data returned.")
+            return pd.DataFrame()
+
+        # Standardize columns
+        df = df.rename(columns={'open': 'open', 'high': 'high', 'low': 'low', 'close': 'close'})
+        df = df[['open', 'high', 'low', 'close']]
+        df.index = pd.to_datetime(df.index)
+        return _clean_ohlc(df)
+
     except Exception as e:
-        print(f"Dukascopy error: {e}")
+        print(f"[Dukascopy] Error: {e}")
         return pd.DataFrame()
 
 
