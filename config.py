@@ -2,36 +2,36 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# Priority: Finnhub (1) -> Twelve Data (2) -> Polygon (3) -> yfinance (Fallback)
+# Reduced to high-quality pairs only + XAGUSD
 ASSETS = {
     'OANDA': [],
 
     'FINNHUB': [
-        'OANDA:EUR_USD', 'OANDA:GBP_USD', 'OANDA:USD_JPY', 'OANDA:AUD_USD', 'OANDA:USD_CAD',
+        'OANDA:EUR_USD', 'OANDA:GBP_USD', 'OANDA:USD_JPY',
         'OANDA:XAU_USD', 'OANDA:XAG_USD',
-        'OANDA:NAS100_USD', 'OANDA:US30_USD', 'OANDA:SPX500_USD'
+        'OANDA:NAS100_USD'
     ],
 
     'TWELVE_DATA': [
-        'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'NZD/USD',
+        'EUR/USD', 'GBP/USD', 'USD/JPY',
         'XAU/USD', 'XAG/USD',
-        'NAS100/USD', 'US30/USD', 'SPX500/USD'
+        'NAS100/USD'
     ],
 
     'POLYGON': [
-        'C:EURUSD', 'C:GBPUSD', 'C:USDJPY', 'C:AUDUSD', 'C:USDCAD',
+        'C:EURUSD', 'C:GBPUSD', 'C:USDJPY',
         'X:XAUUSD', 'X:XAGUSD',
-        'I:SPX', 'I:NDX', 'I:DJI'
+        'I:SPX'
     ],
 
     'BINANCE': [
-        'BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD', 'ADAUSD'
+        'BTCUSD', 'ETHUSD', 'SOLUSD'
     ]
 }
 
 TIMEFRAMES = ['15m', '1h', '4h']
-POLL_INTERVAL_SEC = 90          # Increased to 90s to be kinder on free tier rate limits
-COOLDOWN_MIN = 30               # 30 min cooldown between same pair/tf signals
+POLL_INTERVAL_SEC = 90
+COOLDOWN_MIN = 30
 PROB_THRESHOLD_A = 70
 PROB_THRESHOLD_AP = 80
 WAT_TZ_OFFSET = 1
