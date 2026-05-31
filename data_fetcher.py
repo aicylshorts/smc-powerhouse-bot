@@ -35,25 +35,31 @@ def _make_request_with_retry(url, headers=None, params=None, max_retries=3, back
     return None
 
 
-def get_dukascopy_data(symbol, start_date=None, end_date=None, timeframe='H1'):
+def get_investpy_data(name, country=None, product_type='indices', interval='Daily'):
     """
-    Dukascopy data fetcher (mainly for historical data and backtesting).
-    This can be expanded later for better data quality and validation.
+    Improved investpy fetcher with better timeframe support.
+    Note: investpy has limited intraday support. Falls back gracefully.
     """
-    print("Dukascopy support is under development. Using fallback for now.")
-    return pd.DataFrame()
-
-
-def get_investpy_data(name, country=None, product_type='indices'):
     if investpy is None:
         print("investpy not installed")
         return pd.DataFrame()
 
     try:
         if product_type == 'indices':
-            df = investpy.get_index_historical_data(index=name, country=country or 'united states', from_date='01/01/2020', to_date='31/12/2030', interval='Daily')
+            df = investpy.get_index_historical_data(
+                index=name,
+                country=country or 'united states',
+                from_date='01/01/2023',
+                to_date='31/12/2030',
+                interval=interval
+            )
         elif product_type == 'commodities':
-            df = investpy.get_commodity_historical_data(commodity=name, from_date='01/01/2020', to_date='31/12/2030', interval='Daily')
+            df = investpy.get_commodity_historical_data(
+                commodity=name,
+                from_date='01/01/2023',
+                to_date='31/12/2030',
+                interval=interval
+            )
         else:
             return pd.DataFrame()
 
@@ -66,8 +72,18 @@ def get_investpy_data(name, country=None, product_type='indices'):
         return df
 
     except Exception as e:
-        print(f'investpy error for {name}: {e}')
+        print(f'investpy error for {name} ({interval}): {e}')
         return pd.DataFrame()
+
+
+def get_dukascopy_data(symbol, start=None, end=None, timeframe='H1'):
+    """
+    Dukascopy data fetcher.
+    Currently a placeholder. Will be expanded for historical data download.
+    Good for backtesting and data quality validation.
+    """
+    print("Dukascopy support is being added. Using fallback for now.")
+    return pd.DataFrame()
 
 
 def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
