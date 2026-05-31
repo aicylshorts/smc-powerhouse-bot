@@ -142,8 +142,9 @@ def generate_signals():
 
     from config import ASSETS, TIMEFRAMES, COOLDOWN_MIN, PROB_THRESHOLD_A, PROB_THRESHOLD_AP
     from data_fetcher import (
-        get_binance_candles, get_finnhub_candles, 
-        get_twelve_data_candles, get_polygon_candles, get_yfinance_candles
+        get_binance_candles, get_finnhub_candles, get_twelve_data_candles,
+        get_alpha_vantage_candles, get_tiingo_candles, get_polygon_candles,
+        get_oanda_candles, get_yfinance_candles
     )
     from utils import detect_smc_setup
 
@@ -169,22 +170,29 @@ def generate_signals():
                             df = get_twelve_data_candles(sym.split(':')[-1], interval=tf)
 
                         if df is None or len(df) < 50:
+                            df = get_alpha_vantage_candles(sym.split(':')[-1], interval=tf)
+
+                        if df is None or len(df) < 50:
+                            df = get_tiingo_candles(sym.split(':')[-1].lower(), resampleFreq='1hour' if tf == '1h' else '15min')
+
+                        if df is None or len(df) < 50:
                             yf_symbol = sym.split(':')[-1].replace('_', '') + '=X'
                             df = get_yfinance_candles(yf_symbol, interval=tf)
+
+                    elif broker == 'OANDA':
+                        df = get_oanda_candles(sym, tf)
 
                     elif broker == 'TWELVE_DATA':
                         df = get_twelve_data_candles(sym, interval=tf)
 
-                        if df is None or len(df) < 50:
-                            yf_symbol = sym.replace('/', '').replace('_', '') + '=X'
-                            df = get_yfinance_candles(yf_symbol, interval=tf)
+                    elif broker == 'ALPHA_VANTAGE':
+                        df = get_alpha_vantage_candles(sym, interval=tf)
+
+                    elif broker == 'TIINGO':
+                        df = get_tiingo_candles(sym, resampleFreq='1hour' if tf == '1h' else '15min')
 
                     elif broker == 'POLYGON':
                         df = get_polygon_candles(sym, timespan=tf)
-
-                        if df is None or len(df) < 50:
-                            yf_symbol = sym.replace(':', '').replace('/', '') + '=X'
-                            df = get_yfinance_candles(yf_symbol, interval=tf)
 
                     elif broker == 'BINANCE':
                         df = get_binance_candles(sym, tf)
