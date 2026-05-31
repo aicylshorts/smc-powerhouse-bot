@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# Optimized config - reduced timeframes and slower polling
+# Multi-source setup with Fawaz Exchange API added
 ASSETS = {
     'OANDA': [
         'XAU_USD', 'XAG_USD', 'EUR_USD', 'GBP_USD'
@@ -24,6 +24,10 @@ ASSETS = {
         'EUR/USD', 'GBP/USD', 'XAU/USD'
     ],
 
+    'FAWAZ_EXCHANGE': [
+        'USD'   # Base currency for free rates
+    ],
+
     'POLYGON': [
         'C:EURUSD', 'C:GBPUSD', 'C:USDJPY',
         'X:XAUUSD', 'X:XAGUSD',
@@ -35,8 +39,8 @@ ASSETS = {
     ]
 }
 
-TIMEFRAMES = ['15m', '1h']           # Reduced from 3 to 2 timeframes
-POLL_INTERVAL_SEC = 120             # Increased from 90s to 120s
+TIMEFRAMES = ['15m', '1h']
+POLL_INTERVAL_SEC = 120
 COOLDOWN_MIN = 30
 PROB_THRESHOLD_A = 70
 PROB_THRESHOLD_AP = 80
