@@ -2,10 +2,15 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# Multi-source setup with Fawaz Exchange API added
+# investpy as primary for indices & commodities, with backups
 ASSETS = {
     'OANDA': [
         'XAU_USD', 'XAG_USD', 'EUR_USD', 'GBP_USD'
+    ],
+
+    'INVESTPY': [
+        'NAS100', 'US30', 'SPX500',   # Indices
+        'Gold', 'Silver', 'Crude Oil'  # Commodities
     ],
 
     'FINNHUB': [
@@ -25,7 +30,7 @@ ASSETS = {
     ],
 
     'FAWAZ_EXCHANGE': [
-        'USD'   # Base currency for free rates
+        'USD'
     ],
 
     'POLYGON': [
@@ -35,7 +40,7 @@ ASSETS = {
     ],
 
     'BINANCE': [
-        'BTCUSD', 'ETHUSD', 'SOLUSD'
+        'BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD'
     ]
 }
 
