@@ -2,6 +2,7 @@ import os
 import time
 import requests
 import pandas as pd
+import numpy as np
 
 try:
     import yfinance as yf
@@ -12,6 +13,18 @@ try:
     import investpy
 except ImportError:
     investpy = None
+
+def _clean_ohlc(df):
+    """Clean and prepare OHLC data for SMC detection"""
+    if df.empty:
+        return df
+    df = df.dropna()
+    df = df[~df.index.duplicated(keep='last')]
+    df = df.sort_index()
+    # Ensure proper OHLC relationships
+    df['high'] = df[['open', 'high', 'low', 'close']].max(axis=1)
+    df['low'] = df[['open', 'high', 'low', 'close']].min(axis=1)
+    return df
 
 def _map_oanda_granularity(tf: str) -> str:
     mapping = {
@@ -37,11 +50,10 @@ def _make_request_with_retry(url, headers=None, params=None, max_retries=3, back
 
 def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
     """
-    Fawaz - Improved & Fine-tuned
-    - Uses latest rates
-    - Adds controlled variation for SMC compatibility
-    - Best role: Direction / Bias detection
-    - Not ideal for full pattern recognition
+    Fawaz - Maximum tuned for SMC
+    - Spot rate based with realistic variation
+    - Best used for: Liquidity sweeps, bias, and simple structure
+    - Limitation: Limited real candle body/wick information
     """
     if symbols is None:
         symbols = ['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD']
@@ -64,13 +76,14 @@ def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
             rate = rates.get(sym.lower())
             if rate:
                 close = float(rate)
-                # Controlled variation for pattern detection
-                variation = close * 0.00025
+                # SMC-friendly variation (small body, reasonable wicks)
+                body = close * 0.0002
+                wick = close * 0.00035
                 df_data.append({
                     'symbol': f'{base_currency}{sym}',
-                    'open': round(close - variation, 5),
-                    'high': round(close + variation * 1.2, 5),
-                    'low': round(close - variation * 1.2, 5),
+                    'open': round(close - body, 5),
+                    'high': round(close + wick, 5),
+                    'low': round(close - wick, 5),
                     'close': round(close, 5)
                 })
 
@@ -80,7 +93,7 @@ def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
         df = pd.DataFrame(df_data)
         df['time'] = pd.Timestamp.now()
         df.set_index('time', inplace=True)
-        return df[['open', 'high', 'low', 'close']]
+        return _clean_ohlc(df)
 
     except Exception as e:
         print(f'Fawaz error: {e}')
@@ -89,13 +102,14 @@ def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
 
 def get_investpy_data(name, country=None, product_type='indices', interval='Daily'):
     """
-    investpy - Fine-tuned version with smart fallback
+    investpy - Maximum tuned for SMC
+    - Good daily data for indices and commodities
+    - Strong yfinance fallback
+    - Cleaned output ready for SMC logic
     """
     if investpy is None:
         print("investpy not installed")
         return pd.DataFrame()
-
-    inv_interval = 'Daily'
 
     try:
         if product_type == 'indices':
@@ -104,29 +118,28 @@ def get_investpy_data(name, country=None, product_type='indices', interval='Dail
                 country=country or 'united states',
                 from_date='01/01/2023',
                 to_date='31/12/2030',
-                interval=inv_interval
+                interval='Daily'
             )
         elif product_type == 'commodities':
             df = investpy.get_commodity_historical_data(
                 commodity=name,
                 from_date='01/01/2023',
                 to_date='31/12/2030',
-                interval=inv_interval
+                interval='Daily'
             )
         else:
             return pd.DataFrame()
 
         if df.empty:
-            raise ValueError("Empty data")
+            raise ValueError("Empty")
 
         df = df[['Open', 'High', 'Low', 'Close']].copy()
         df.columns = ['open', 'high', 'low', 'close']
         df.index = pd.to_datetime(df.index)
-        return df
+        return _clean_ohlc(df)
 
-    except Exception as e:
-        print(f'investpy failed for {name}, trying yfinance fallback...')
-        # yfinance fallback
+    except Exception:
+        # yfinance fallback (strong for indices & commodities)
         try:
             if yf:
                 ticker_map = {
@@ -138,18 +151,18 @@ def get_investpy_data(name, country=None, product_type='indices', interval='Dail
                     'Crude Oil': 'CL=F'
                 }
                 ticker = ticker_map.get(name, name)
-                df = yf.download(ticker, period='90d', interval='1d', progress=False)
+                df = yf.download(ticker, period='120d', interval='1d', progress=False)
                 if not df.empty:
                     df = df[['Open', 'High', 'Low', 'Close']].copy()
                     df.columns = ['open', 'high', 'low', 'close']
-                    return df
-        except Exception as yf_err:
-            print(f'yfinance fallback also failed: {yf_err}')
+                    return _clean_ohlc(df)
+        except:
+            pass
         return pd.DataFrame()
 
 
 def get_dukascopy_data(symbol, start=None, end=None, timeframe='H1'):
-    print("Dukascopy support coming soon.")
+    print("Dukascopy support in progress.")
     return pd.DataFrame()
 
 
@@ -178,7 +191,8 @@ def get_oanda_candles(instrument, granularity='M15', count=300):
             'low': float(c['mid']['l']),
             'close': float(c['mid']['c'])
         } for c in data])
-        return df.set_index('time')
+        df.set_index('time', inplace=True)
+        return _clean_ohlc(df)
 
     except Exception as e:
         print(f'OANDA error for {instrument} ({granularity}): {e}')
@@ -214,7 +228,7 @@ def get_finnhub_candles(symbol, resolution='15', count=300):
             'close': data['c']
         })
         df.set_index('time', inplace=True)
-        return df
+        return _clean_ohlc(df)
 
     except Exception as e:
         print(f'Finnhub error for {symbol}: {e}')
@@ -243,7 +257,7 @@ def get_twelve_data_candles(symbol, interval='15min', outputsize=300):
         df['datetime'] = pd.to_datetime(df['datetime'])
         df.set_index('datetime', inplace=True)
         df = df[['open', 'high', 'low', 'close']].astype(float)
-        return df.sort_index()
+        return _clean_ohlc(df)
 
     except Exception as e:
         print(f'Twelve Data error for {symbol}: {e}')
@@ -280,7 +294,7 @@ def get_alpha_vantage_candles(symbol, interval='15min', outputsize=100):
         df = df.rename(columns={'1. open': 'open', '2. high': 'high', '3. low': 'low', '4. close': 'close'})
         df = df[['open', 'high', 'low', 'close']].astype(float)
         df.index = pd.to_datetime(df.index)
-        return df.sort_index()
+        return _clean_ohlc(df)
 
     except Exception as e:
         print(f'Alpha Vantage error for {symbol}: {e}')
@@ -316,7 +330,7 @@ def get_polygon_candles(ticker, multiplier=15, timespan='minute', limit=500):
         df.set_index('time', inplace=True)
         df = df[['o', 'h', 'l', 'c']].copy()
         df.columns = ['open', 'high', 'low', 'close']
-        return df.sort_index()
+        return _clean_ohlc(df)
 
     except Exception as e:
         print(f'Polygon error for {ticker}: {e}')
@@ -335,7 +349,8 @@ def get_yfinance_candles(symbol, period='5d', interval='15m'):
             return pd.DataFrame()
         df = df[['Open', 'High', 'Low', 'Close']].copy()
         df.columns = ['open', 'high', 'low', 'close']
-        return df
+        return _clean_ohlc(df)
+
     except Exception as e:
         print(f'yfinance error for {symbol}: {e}')
         return pd.DataFrame()
@@ -360,7 +375,7 @@ def get_coingecko_candles(coin_id, vs_currency='usd', days=5):
         df['open'] = df['close']
         df['high'] = df['close']
         df['low'] = df['close']
-        return df[['open', 'high', 'low', 'close']]
+        return _clean_ohlc(df)
 
     except Exception as e:
         print(f'CoinGecko error for {coin_id}: {e}')
@@ -383,7 +398,7 @@ def get_binance_candles(symbol, interval='15m', limit=300):
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.set_index('timestamp', inplace=True)
         df = df.astype(float)
-        return df
+        return _clean_ohlc(df)
 
     except Exception as e:
         print(f'Binance error for {symbol}: {e}')
