@@ -4,3 +4,4 @@ numpy
 python-dotenv
 flask
 schedule
+yfinance
