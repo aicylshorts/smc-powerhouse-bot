@@ -30,6 +30,50 @@ def _make_request_with_retry(url, headers=None, params=None, max_retries=3, back
     return None
 
 
+def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
+    '''fawazahmed0/exchange-api - Free with no rate limits (best effort)'''
+    if symbols is None:
+        symbols = ['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD']
+
+    url = f'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/{base_currency.lower()}.json'
+
+    try:
+        resp = _make_request_with_retry(url)
+        if resp is None:
+            return pd.DataFrame()
+
+        data = resp.json()
+        rates = data.get(base_currency.lower(), {})
+
+        if not rates:
+            return pd.DataFrame()
+
+        # Create a simple DataFrame with latest rates
+        df_data = []
+        for sym in symbols:
+            rate = rates.get(sym.lower())
+            if rate:
+                df_data.append({
+                    'symbol': f'{base_currency}{sym}',
+                    'close': float(rate)
+                })
+
+        if not df_data:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(df_data)
+        df['time'] = pd.Timestamp.now()
+        df.set_index('time', inplace=True)
+        df['open'] = df['close']
+        df['high'] = df['close']
+        df['low'] = df['close']
+        return df[['open', 'high', 'low', 'close']]
+
+    except Exception as e:
+        print(f'Fawaz Exchange API error: {e}')
+        return pd.DataFrame()
+
+
 def get_oanda_candles(instrument, granularity='M15', count=300):
     url = f'https://api-fxtrade-practice.oanda.com/v3/instruments/{instrument}/candles'
     headers = {
@@ -128,13 +172,11 @@ def get_twelve_data_candles(symbol, interval='15min', outputsize=300):
 
 
 def get_alpha_vantage_candles(symbol, interval='15min', outputsize=100):
-    '''Alpha Vantage as additional free source'''
     api_key = os.getenv('ALPHA_VANTAGE_TOKEN')
     if not api_key:
         print("ALPHA_VANTAGE_TOKEN not set")
         return pd.DataFrame()
 
-    # Map interval
     av_interval = {
         '15m': '15min',
         '1h': '60min',
@@ -163,35 +205,6 @@ def get_alpha_vantage_candles(symbol, interval='15min', outputsize=100):
 
     except Exception as e:
         print(f'Alpha Vantage error for {symbol}: {e}')
-        return pd.DataFrame()
-
-
-def get_tiingo_candles(symbol, startDate=None, endDate=None, resampleFreq='1hour'):
-    token = os.getenv('TIINGO_TOKEN')
-    if not token:
-        print("TIINGO_TOKEN not set")
-        return pd.DataFrame()
-
-    headers = {'Content-Type': 'application/json', 'Authorization': f'Token {token}'}
-    url = f'https://api.tiingo.com/tiingo/fx/{symbol}/prices?resampleFreq={resampleFreq}'
-
-    try:
-        resp = _make_request_with_retry(url, headers=headers)
-        if resp is None:
-            return pd.DataFrame()
-
-        data = resp.json()
-        if not isinstance(data, list):
-            return pd.DataFrame()
-
-        df = pd.DataFrame(data)
-        df['date'] = pd.to_datetime(df['date'])
-        df.set_index('date', inplace=True)
-        df = df[['open', 'high', 'low', 'close']].astype(float)
-        return df
-
-    except Exception as e:
-        print(f'Tiingo error for {symbol}: {e}')
         return pd.DataFrame()
 
 
