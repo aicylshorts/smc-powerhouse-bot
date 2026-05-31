@@ -35,8 +35,41 @@ def _make_request_with_retry(url, headers=None, params=None, max_retries=3, back
     return None
 
 
+def get_omkar_commodity_price(commodity='gold'):
+    '''omkarcloud/commodity-price-api as second source for Gold and Silver'''
+    api_key = os.getenv('OMKAR_CLOUD_API_KEY')
+    if not api_key:
+        print("OMKAR_CLOUD_API_KEY not set")
+        return pd.DataFrame()
+
+    url = f'https://api.omkar.cloud/commodity-price?symbol={commodity}&api_key={api_key}'
+
+    try:
+        resp = _make_request_with_retry(url)
+        if resp is None:
+            return pd.DataFrame()
+
+        data = resp.json()
+        if not data or 'price' not in data:
+            return pd.DataFrame()
+
+        price = float(data['price'])
+        df = pd.DataFrame([{
+            'time': pd.Timestamp.now(),
+            'open': price,
+            'high': price,
+            'low': price,
+            'close': price
+        }])
+        df.set_index('time', inplace=True)
+        return df
+
+    except Exception as e:
+        print(f'OmkarCloud error for {commodity}: {e}')
+        return pd.DataFrame()
+
+
 def get_investpy_data(name, country=None, product_type='indices'):
-    '''investpy as primary source for indices and commodities (no API key needed)'''
     if investpy is None:
         print("investpy not installed")
         return pd.DataFrame()
