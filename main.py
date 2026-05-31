@@ -155,6 +155,8 @@ def generate_signals():
         logger.info('High impact news window active - skipping scan')
         return
 
+    CRYPTO_FAWAZ = ['BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD']
+
     for broker, symbols in ASSETS.items():
         for sym in symbols:
             for tf in TIMEFRAMES:
@@ -162,7 +164,11 @@ def generate_signals():
                     df = None
                     htf_df = None
 
-                    if broker == 'FINNHUB':
+                    # Fawaz as primary for forex + selected cryptos
+                    if broker == 'FAWAZ_EXCHANGE':
+                        df = get_fawaz_exchange_rate()
+
+                    elif broker == 'FINNHUB':
                         finnhub_res = '15' if tf == '15m' else '60'
                         df = get_finnhub_candles(sym, resolution=finnhub_res)
 
@@ -170,7 +176,10 @@ def generate_signals():
                             df = get_alpha_vantage_candles(sym.split(':')[-1], interval=tf)
 
                         if df is None or len(df) < 50:
-                            df = get_fawaz_exchange_rate()
+                            # Use Fawaz for selected cryptos
+                            short_sym = sym.replace('_', '').replace(':', '').upper()
+                            if short_sym in CRYPTO_FAWAZ or short_sym.replace('OANDA', '') in ['EURUSD', 'GBPUSD', 'USDJPY']:
+                                df = get_fawaz_exchange_rate()
 
                         if df is None or len(df) < 50:
                             df = get_polygon_candles(sym, timespan=tf)
@@ -185,9 +194,6 @@ def generate_signals():
                     elif broker == 'ALPHA_VANTAGE':
                         df = get_alpha_vantage_candles(sym, interval=tf)
 
-                    elif broker == 'FAWAZ_EXCHANGE':
-                        df = get_fawaz_exchange_rate()
-
                     elif broker == 'POLYGON':
                         df = get_polygon_candles(sym, timespan=tf)
 
@@ -198,7 +204,10 @@ def generate_signals():
                         df = get_oanda_candles(sym, tf)
 
                     elif broker == 'BINANCE':
-                        df = get_binance_candles(sym, tf)
+                        # Only use Binance if not covered by Fawaz
+                        short_sym = sym.replace('_', '').upper()
+                        if short_sym not in CRYPTO_FAWAZ:
+                            df = get_binance_candles(sym, tf)
 
                     if df is None or len(df) < 50:
                         continue
