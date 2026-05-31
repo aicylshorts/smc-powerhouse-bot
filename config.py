@@ -2,41 +2,29 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# Smart multi-timeframe setup (15m + 1h for signals, 4h for confirmation)
+# Dominant sources: Fawaz (Forex + Crypto) + investpy (Indices + Commodities)
 ASSETS = {
-    'OANDA': [
-        'XAU_USD', 'XAG_USD', 'EUR_USD', 'GBP_USD'
+    'FAWAZ_EXCHANGE': [
+        'USD'   # Handles EURUSD, GBPUSD, USDJPY, BTC, ETH, SOL, XRP
     ],
 
     'INVESTPY': [
-        'NAS100', 'US30', 'SPX500',
-        'Gold', 'Silver', 'Crude Oil'
+        'NAS100', 'US30', 'SPX500',      # Indices
+        'Gold', 'Silver', 'Crude Oil'   # Commodities
     ],
 
-    'FINNHUB': [
-        'OANDA:EUR_USD', 'OANDA:GBP_USD', 'OANDA:USD_JPY',
-        'OANDA:XAU_USD', 'OANDA:XAG_USD',
-        'OANDA:NAS100_USD'
-    ],
-
-    'TWELVE_DATA': [
-        'EUR/USD', 'GBP/USD', 'USD/JPY',
-        'XAU/USD', 'XAG/USD',
-        'NAS100/USD'
+    # Fallback sources (only used if primary fails)
+    'OANDA': [
+        'XAU_USD', 'XAG_USD', 'EUR_USD', 'GBP_USD'
     ],
 
     'ALPHA_VANTAGE': [
         'EUR/USD', 'GBP/USD', 'XAU/USD'
     ],
 
-    'FAWAZ_EXCHANGE': [
-        'USD'
-    ],
-
     'POLYGON': [
         'C:EURUSD', 'C:GBPUSD', 'C:USDJPY',
-        'X:XAUUSD', 'X:XAGUSD',
-        'I:SPX'
+        'X:XAUUSD', 'X:XAGUSD'
     ],
 
     'BINANCE': [
@@ -44,7 +32,7 @@ ASSETS = {
     ]
 }
 
-TIMEFRAMES = ['15m', '1h', '4h']   # 15m + 1h for signals, 4h for HTF confirmation
+TIMEFRAMES = ['15m', '1h', '4h']
 POLL_INTERVAL_SEC = 120
 COOLDOWN_MIN = 30
 PROB_THRESHOLD_A = 70
