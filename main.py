@@ -59,13 +59,29 @@ def calculate_risk_per_lot(sl_price, entry_price, symbol):
         risk_per_0_01 = round(sl_distance * 10, 2)
     return risk_per_0_01
 
-def is_high_impact_news_time():
+def is_high_impact_news_time(symbol=None):
+    """
+    Improved news filter with basic per-asset sensitivity.
+    Gold and indices are more sensitive to news.
+    """
     from config import AVOID_NEWS_MINUTES_BEFORE, AVOID_NEWS_MINUTES_AFTER, HIGH_IMPACT_WINDOWS
+
     now = datetime.now(timezone.utc)
+
+    # Adjust sensitivity based on asset
+    sensitivity = 1.0
+    if symbol:
+        if 'XAU' in symbol or 'XAG' in symbol or 'NAS' in symbol or 'US30' in symbol:
+            sensitivity = 1.3  # Gold, Silver and Indices are more sensitive
+
+    adjusted_before = int(AVOID_NEWS_MINUTES_BEFORE * sensitivity)
+    adjusted_after = int(AVOID_NEWS_MINUTES_AFTER * sensitivity)
+
     for news_hour, news_minute in HIGH_IMPACT_WINDOWS:
         news_time = now.replace(hour=news_hour, minute=news_minute, second=0, microsecond=0)
         time_diff = (now - news_time).total_seconds() / 60
-        if -AVOID_NEWS_MINUTES_BEFORE <= time_diff <= AVOID_NEWS_MINUTES_AFTER:
+
+        if -adjusted_before <= time_diff <= adjusted_after:
             return True
     return False
 
@@ -149,14 +165,14 @@ def generate_signals():
     from utils import detect_smc_setup
 
     current_session = get_trading_session()
-    high_news = is_high_impact_news_time()
-
-    if high_news:
-        logger.info('High impact news window active - skipping scan')
-        return
 
     for broker, symbols in ASSETS.items():
         for sym in symbols:
+            # Improved news filter with per-asset sensitivity
+            if is_high_impact_news_time(symbol=sym):
+                logger.info(f'High impact news window active for {sym} - skipping scan')
+                continue
+
             # Fetch 4h data once per symbol for HTF confirmation
             htf_df = None
             try:
@@ -192,8 +208,7 @@ def generate_signals():
                         df = get_fawaz_exchange_rate()
 
                     elif broker == 'FINNHUB':
-                        finnhub_res = '15' if tf == '15m' else ('60' if tf == '1h' else '240
-')
+                        finnhub_res = '15' if tf == '15m' else ('60' if tf == '1h' else '240')
                         df = get_finnhub_candles(sym, resolution=finnhub_res)
 
                         if df is None or len(df) < 50:
@@ -227,7 +242,6 @@ def generate_signals():
                     if df is None or len(df) < 50:
                         continue
 
-                    # Pass 4h data as higher timeframe confirmation
                     setup = detect_smc_setup(df, sym, tf, htf_df=htf_df)
                     if setup:
                         score = setup.get('score', 0)
