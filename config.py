@@ -7,25 +7,25 @@ ASSETS = {
     'OANDA': [],
 
     'FINNHUB': [
-        'OANDA:EUR_USD', 'OANDA:GBP_USD', 'OANDA:USD_JPY', 'OANDA:AUD_USD',
+        'OANDA:EUR_USD', 'OANDA:GBP_USD', 'OANDA:USD_JPY', 'OANDA:AUD_USD', 'OANDA:USD_CAD',
         'OANDA:XAU_USD', 'OANDA:XAG_USD',
-        'OANDA:NAS100_USD', 'OANDA:US30_USD'
+        'OANDA:NAS100_USD', 'OANDA:US30_USD', 'OANDA:SPX500_USD'
     ],
 
     'TWELVE_DATA': [
-        'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD',
+        'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'NZD/USD',
         'XAU/USD', 'XAG/USD',
-        'NAS100/USD', 'US30/USD'
+        'NAS100/USD', 'US30/USD', 'SPX500/USD'
     ],
 
     'POLYGON': [
-        'C:EURUSD', 'C:GBPUSD', 'C:USDJPY', 'C:AUDUSD',
-        'X: XAUUSD', 'X: XAGUSD',
-        'I:SPX', 'I:NDX'
+        'C:EURUSD', 'C:GBPUSD', 'C:USDJPY', 'C:AUDUSD', 'C:USDCAD',
+        'X:XAUUSD', 'X:XAGUSD',
+        'I:SPX', 'I:NDX', 'I:DJI'
     ],
 
     'BINANCE': [
-        'BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD'
+        'BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD', 'ADAUSD'
     ]
 }
 
