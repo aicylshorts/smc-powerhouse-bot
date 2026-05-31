@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# Data sources with OANDA brought back (small list to avoid previous issues)
+# Multi-source setup with OANDA + new additions
 ASSETS = {
     'OANDA': [
         'XAU_USD', 'XAG_USD', 'EUR_USD', 'GBP_USD'
@@ -18,6 +18,14 @@ ASSETS = {
         'EUR/USD', 'GBP/USD', 'USD/JPY',
         'XAU/USD', 'XAG/USD',
         'NAS100/USD'
+    ],
+
+    'ALPHA_VANTAGE': [
+        'EUR/USD', 'GBP/USD', 'XAU/USD'
+    ],
+
+    'TIINGO': [
+        'eurusd', 'gbpusd', 'xauusd'
     ],
 
     'POLYGON': [
