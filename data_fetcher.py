@@ -127,14 +127,80 @@ def get_twelve_data_candles(symbol, interval='15min', outputsize=300):
         return pd.DataFrame()
 
 
+def get_alpha_vantage_candles(symbol, interval='15min', outputsize=100):
+    '''Alpha Vantage as additional free source'''
+    api_key = os.getenv('ALPHA_VANTAGE_TOKEN')
+    if not api_key:
+        print("ALPHA_VANTAGE_TOKEN not set")
+        return pd.DataFrame()
+
+    # Map interval
+    av_interval = {
+        '15m': '15min',
+        '1h': '60min',
+        '4h': '240min'
+    }.get(interval, '15min')
+
+    url = f'https://www.alphavantage.co/query?function=TIME_SERIES_FOREX_INTRADAY&from_symbol={symbol.split("/")[0] if "/" in symbol else symbol}&to_symbol={symbol.split("/")[1] if "/" in symbol else "USD"}&interval={av_interval}&outputsize=compact&apikey={api_key}'
+
+    try:
+        resp = _make_request_with_retry(url)
+        if resp is None:
+            return pd.DataFrame()
+
+        data = resp.json()
+        key = list(data.keys())[1] if len(data.keys()) > 1 else None
+        if not key or 'Time Series' not in str(data.get(key, {})):
+            print(f"Alpha Vantage returned no data for {symbol}")
+            return pd.DataFrame()
+
+        time_series = data[key]
+        df = pd.DataFrame.from_dict(time_series, orient='index')
+        df = df.rename(columns={'1. open': 'open', '2. high': 'high', '3. low': 'low', '4. close': 'close'})
+        df = df[['open', 'high', 'low', 'close']].astype(float)
+        df.index = pd.to_datetime(df.index)
+        return df.sort_index()
+
+    except Exception as e:
+        print(f'Alpha Vantage error for {symbol}: {e}')
+        return pd.DataFrame()
+
+
+def get_tiingo_candles(symbol, startDate=None, endDate=None, resampleFreq='1hour'):
+    token = os.getenv('TIINGO_TOKEN')
+    if not token:
+        print("TIINGO_TOKEN not set")
+        return pd.DataFrame()
+
+    headers = {'Content-Type': 'application/json', 'Authorization': f'Token {token}'}
+    url = f'https://api.tiingo.com/tiingo/fx/{symbol}/prices?resampleFreq={resampleFreq}'
+
+    try:
+        resp = _make_request_with_retry(url, headers=headers)
+        if resp is None:
+            return pd.DataFrame()
+
+        data = resp.json()
+        if not isinstance(data, list):
+            return pd.DataFrame()
+
+        df = pd.DataFrame(data)
+        df['date'] = pd.to_datetime(df['date'])
+        df.set_index('date', inplace=True)
+        df = df[['open', 'high', 'low', 'close']].astype(float)
+        return df
+
+    except Exception as e:
+        print(f'Tiingo error for {symbol}: {e}')
+        return pd.DataFrame()
+
+
 def get_polygon_candles(ticker, multiplier=15, timespan='minute', limit=500):
-    '''Polygon.io as third main source'''
     api_key = os.getenv('POLYGON_API_KEY')
     if not api_key:
         print("POLYGON_API_KEY not set")
         return pd.DataFrame()
 
-    # Convert timeframe
     if timespan == '15m':
         multiplier, timespan = 15, 'minute'
     elif timespan == '1h':
