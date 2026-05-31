@@ -8,6 +8,11 @@ try:
 except ImportError:
     yf = None
 
+try:
+    import investpy
+except ImportError:
+    investpy = None
+
 def _map_oanda_granularity(tf: str) -> str:
     mapping = {
         '15m': 'M15',
@@ -30,8 +35,34 @@ def _make_request_with_retry(url, headers=None, params=None, max_retries=3, back
     return None
 
 
+def get_investpy_data(name, country=None, product_type='indices'):
+    '''investpy as primary source for indices and commodities (no API key needed)'''
+    if investpy is None:
+        print("investpy not installed")
+        return pd.DataFrame()
+
+    try:
+        if product_type == 'indices':
+            df = investpy.get_index_historical_data(index=name, country=country or 'united states', from_date='01/01/2020', to_date='31/12/2030', interval='Daily')
+        elif product_type == 'commodities':
+            df = investpy.get_commodity_historical_data(commodity=name, from_date='01/01/2020', to_date='31/12/2030', interval='Daily')
+        else:
+            return pd.DataFrame()
+
+        if df.empty:
+            return pd.DataFrame()
+
+        df = df[['Open', 'High', 'Low', 'Close']].copy()
+        df.columns = ['open', 'high', 'low', 'close']
+        df.index = pd.to_datetime(df.index)
+        return df
+
+    except Exception as e:
+        print(f'investpy error for {name}: {e}')
+        return pd.DataFrame()
+
+
 def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
-    '''fawazahmed0/exchange-api - Free with no rate limits (best effort)'''
     if symbols is None:
         symbols = ['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD']
 
@@ -48,7 +79,6 @@ def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
         if not rates:
             return pd.DataFrame()
 
-        # Create a simple DataFrame with latest rates
         df_data = []
         for sym in symbols:
             rate = rates.get(sym.lower())
