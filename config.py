@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# investpy (primary) -> OmkarCloud (second for Gold/Silver) -> others
+# Smart multi-timeframe setup (15m + 1h for signals, 4h for confirmation)
 ASSETS = {
     'OANDA': [
         'XAU_USD', 'XAG_USD', 'EUR_USD', 'GBP_USD'
@@ -11,10 +11,6 @@ ASSETS = {
     'INVESTPY': [
         'NAS100', 'US30', 'SPX500',
         'Gold', 'Silver', 'Crude Oil'
-    ],
-
-    'OMKAR_CLOUD': [
-        'gold', 'silver'
     ],
 
     'FINNHUB': [
@@ -48,7 +44,7 @@ ASSETS = {
     ]
 }
 
-TIMEFRAMES = ['15m', '1h']
+TIMEFRAMES = ['15m', '1h', '4h']   # 15m + 1h for signals, 4h for HTF confirmation
 POLL_INTERVAL_SEC = 120
 COOLDOWN_MIN = 30
 PROB_THRESHOLD_A = 70
