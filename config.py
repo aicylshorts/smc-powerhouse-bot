@@ -2,15 +2,19 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# investpy as primary for indices & commodities, with backups
+# investpy (primary) -> OmkarCloud (second for Gold/Silver) -> others
 ASSETS = {
     'OANDA': [
         'XAU_USD', 'XAG_USD', 'EUR_USD', 'GBP_USD'
     ],
 
     'INVESTPY': [
-        'NAS100', 'US30', 'SPX500',   # Indices
-        'Gold', 'Silver', 'Crude Oil'  # Commodities
+        'NAS100', 'US30', 'SPX500',
+        'Gold', 'Silver', 'Crude Oil'
+    ],
+
+    'OMKAR_CLOUD': [
+        'gold', 'silver'
     ],
 
     'FINNHUB': [
