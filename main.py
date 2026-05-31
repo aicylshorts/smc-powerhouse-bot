@@ -141,7 +141,10 @@ def generate_signals():
     check_telegram_commands()
 
     from config import ASSETS, TIMEFRAMES, COOLDOWN_MIN, PROB_THRESHOLD_A, PROB_THRESHOLD_AP
-    from data_fetcher import get_binance_candles, get_finnhub_candles, get_twelve_data_candles, get_yfinance_candles
+    from data_fetcher import (
+        get_binance_candles, get_finnhub_candles, 
+        get_twelve_data_candles, get_polygon_candles, get_yfinance_candles
+    )
     from utils import detect_smc_setup
 
     current_session = get_trading_session()
@@ -162,12 +165,9 @@ def generate_signals():
                         finnhub_res = '15' if tf == '15m' else ('60' if tf == '1h' else '240')
                         df = get_finnhub_candles(sym, resolution=finnhub_res)
 
-                        # Fallback to Twelve Data
                         if df is None or len(df) < 50:
-                            td_symbol = sym.split(':')[-1]
-                            df = get_twelve_data_candles(td_symbol, interval=tf)
+                            df = get_twelve_data_candles(sym.split(':')[-1], interval=tf)
 
-                        # Final fallback to yfinance
                         if df is None or len(df) < 50:
                             yf_symbol = sym.split(':')[-1].replace('_', '') + '=X'
                             df = get_yfinance_candles(yf_symbol, interval=tf)
@@ -177,6 +177,13 @@ def generate_signals():
 
                         if df is None or len(df) < 50:
                             yf_symbol = sym.replace('/', '').replace('_', '') + '=X'
+                            df = get_yfinance_candles(yf_symbol, interval=tf)
+
+                    elif broker == 'POLYGON':
+                        df = get_polygon_candles(sym, timespan=tf)
+
+                        if df is None or len(df) < 50:
+                            yf_symbol = sym.replace(':', '').replace('/', '') + '=X'
                             df = get_yfinance_candles(yf_symbol, interval=tf)
 
                     elif broker == 'BINANCE':
