@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# Multi-source setup with OANDA + new additions
+# Multi-source setup (Tiingo removed for now)
 ASSETS = {
     'OANDA': [
         'XAU_USD', 'XAG_USD', 'EUR_USD', 'GBP_USD'
@@ -22,10 +22,6 @@ ASSETS = {
 
     'ALPHA_VANTAGE': [
         'EUR/USD', 'GBP/USD', 'XAU/USD'
-    ],
-
-    'TIINGO': [
-        'eurusd', 'gbpusd', 'xauusd'
     ],
 
     'POLYGON': [
