@@ -35,12 +35,11 @@ def _make_request_with_retry(url, headers=None, params=None, max_retries=3, back
     return None
 
 
-def get_fawaz_exchange_rate(base_currency='USD', symbols=None, lookback=5):
+def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
     """
-    Improved Fawaz fetcher.
-    Still limited because it returns spot rates.
-    We add a small lookback to simulate minimal OHLC variation.
-    Best used for direction/bias rather than full pattern detection.
+    Fawaz improved version.
+    Uses latest rates + small variation for SMC compatibility.
+    Role: Best for direction/bias rather than full pattern detection.
     """
     if symbols is None:
         symbols = ['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD']
@@ -62,15 +61,14 @@ def get_fawaz_exchange_rate(base_currency='USD', symbols=None, lookback=5):
         for sym in symbols:
             rate = rates.get(sym.lower())
             if rate:
-                # Simulate minimal variation for SMC compatibility
                 close = float(rate)
-                variation = close * 0.0002  # small artificial variation
+                variation = close * 0.0003
                 df_data.append({
                     'symbol': f'{base_currency}{sym}',
-                    'open': close - variation,
-                    'high': close + variation,
-                    'low': close - variation,
-                    'close': close
+                    'open': round(close - variation, 5),
+                    'high': round(close + variation, 5),
+                    'low': round(close - variation, 5),
+                    'close': round(close, 5)
                 })
 
         if not df_data:
@@ -82,14 +80,25 @@ def get_fawaz_exchange_rate(base_currency='USD', symbols=None, lookback=5):
         return df[['open', 'high', 'low', 'close']]
 
     except Exception as e:
-        print(f'Fawaz Exchange API error: {e}')
+        print(f'Fawaz error: {e}')
         return pd.DataFrame()
 
 
 def get_investpy_data(name, country=None, product_type='indices', interval='Daily'):
+    """
+    Improved investpy with better interval handling and fallback.
+    """
     if investpy is None:
         print("investpy not installed")
         return pd.DataFrame()
+
+    # Map our timeframes to investpy intervals
+    inv_interval = {
+        '15m': 'Daily',   # investpy has weak intraday support
+        '1h': 'Daily',
+        '4h': 'Daily',
+        'Daily': 'Daily'
+    }.get(interval, 'Daily')
 
     try:
         if product_type == 'indices':
@@ -98,14 +107,14 @@ def get_investpy_data(name, country=None, product_type='indices', interval='Dail
                 country=country or 'united states',
                 from_date='01/01/2023',
                 to_date='31/12/2030',
-                interval=interval
+                interval=inv_interval
             )
         elif product_type == 'commodities':
             df = investpy.get_commodity_historical_data(
                 commodity=name,
                 from_date='01/01/2023',
                 to_date='31/12/2030',
-                interval=interval
+                interval=inv_interval
             )
         else:
             return pd.DataFrame()
@@ -119,12 +128,30 @@ def get_investpy_data(name, country=None, product_type='indices', interval='Dail
         return df
 
     except Exception as e:
-        print(f'investpy error for {name} ({interval}): {e}')
+        print(f'investpy error for {name}: {e}')
+        # Fallback to yfinance
+        try:
+            if yf:
+                ticker_map = {
+                    'NAS100': '^NDX',
+                    'US30': '^DJI',
+                    'SPX500': '^GSPC',
+                    'Gold': 'GC=F',
+                    'Silver': 'SI=F'
+                }
+                ticker = ticker_map.get(name, name)
+                df = yf.download(ticker, period='60d', interval='1d', progress=False)
+                if not df.empty:
+                    df = df[['Open', 'High', 'Low', 'Close']].copy()
+                    df.columns = ['open', 'high', 'low', 'close']
+                    return df
+        except:
+            pass
         return pd.DataFrame()
 
 
 def get_dukascopy_data(symbol, start=None, end=None, timeframe='H1'):
-    print("Dukascopy support is being added. Using fallback for now.")
+    print("Dukascopy support coming soon.")
     return pd.DataFrame()
 
 
