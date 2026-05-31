@@ -164,11 +164,10 @@ def generate_signals():
             if is_high_impact_news_time(symbol=sym):
                 continue
 
-            # Fetch 4h HTF data
             htf_df = None
             try:
                 if broker == 'INVESTPY':
-                    htf_df = get_investpy_data(sym, product_type='commodities' if sym in ['Gold','Silver','Crude Oil'] else 'indices')
+                    htf_df = get_investpy_data(sym, product_type='commodities' if sym in ['Gold','Silver','Crude Oil'] else 'indices', interval='Daily')
                 elif broker == 'FAWAZ_EXCHANGE':
                     htf_df = get_fawaz_exchange_rate()
             except:
@@ -177,15 +176,19 @@ def generate_signals():
             for tf in TIMEFRAMES:
                 df = None
 
-                # === PRIMARY SOURCES ===
+                # Primary Sources
                 if broker == 'FAWAZ_EXCHANGE':
                     df = get_fawaz_exchange_rate()
 
                 elif broker == 'INVESTPY':
                     product = 'commodities' if sym in ['Gold','Silver','Crude Oil'] else 'indices'
-                    df = get_investpy_data(sym, product_type=product)
+                    # Use appropriate interval
+                    inv_interval = 'Daily'
+                    if tf in ['15m', '1h']:
+                        inv_interval = 'Hourly'
+                    df = get_investpy_data(sym, product_type=product, interval=inv_interval)
 
-                # === FALLBACKS (only if primary fails) ===
+                # Light fallbacks
                 if df is None or len(df) < 30:
                     if broker == 'OANDA':
                         df = get_oanda_candles(sym, tf)
@@ -233,8 +236,6 @@ def generate_signals():
                             sent_signals[key] = time.time()
                             logger.info(f'High-quality signal sent: #{signal_id} | Score: {score}')
 
-    # Fallback scan for any missed symbols using light fallbacks
-    # (kept minimal to avoid rate limits)
 
 def send_daily_report():
     report = tracker.get_monthly_report()
