@@ -15,13 +15,11 @@ except ImportError:
     investpy = None
 
 def _clean_ohlc(df):
-    """Clean and prepare OHLC data for SMC detection"""
     if df.empty:
         return df
     df = df.dropna()
     df = df[~df.index.duplicated(keep='last')]
     df = df.sort_index()
-    # Ensure proper OHLC relationships
     df['high'] = df[['open', 'high', 'low', 'close']].max(axis=1)
     df['low'] = df[['open', 'high', 'low', 'close']].min(axis=1)
     return df
@@ -50,10 +48,8 @@ def _make_request_with_retry(url, headers=None, params=None, max_retries=3, back
 
 def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
     """
-    Fawaz - Maximum tuned for SMC
-    - Spot rate based with realistic variation
-    - Best used for: Liquidity sweeps, bias, and simple structure
-    - Limitation: Limited real candle body/wick information
+    Fawaz - Fine-tuned for SMC
+    Spot rates with realistic variation for liquidity & structure detection.
     """
     if symbols is None:
         symbols = ['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD']
@@ -76,7 +72,6 @@ def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
             rate = rates.get(sym.lower())
             if rate:
                 close = float(rate)
-                # SMC-friendly variation (small body, reasonable wicks)
                 body = close * 0.0002
                 wick = close * 0.00035
                 df_data.append({
@@ -102,10 +97,7 @@ def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
 
 def get_investpy_data(name, country=None, product_type='indices', interval='Daily'):
     """
-    investpy - Maximum tuned for SMC
-    - Good daily data for indices and commodities
-    - Strong yfinance fallback
-    - Cleaned output ready for SMC logic
+    investpy - Fine-tuned + strong fallback for SMC
     """
     if investpy is None:
         print("investpy not installed")
@@ -114,24 +106,18 @@ def get_investpy_data(name, country=None, product_type='indices', interval='Dail
     try:
         if product_type == 'indices':
             df = investpy.get_index_historical_data(
-                index=name,
-                country=country or 'united states',
-                from_date='01/01/2023',
-                to_date='31/12/2030',
-                interval='Daily'
+                index=name, country=country or 'united states',
+                from_date='01/01/2023', to_date='31/12/2030', interval='Daily'
             )
         elif product_type == 'commodities':
             df = investpy.get_commodity_historical_data(
-                commodity=name,
-                from_date='01/01/2023',
-                to_date='31/12/2030',
-                interval='Daily'
+                commodity=name, from_date='01/01/2023', to_date='31/12/2030', interval='Daily'
             )
         else:
             return pd.DataFrame()
 
         if df.empty:
-            raise ValueError("Empty")
+            raise ValueError("Empty data from investpy")
 
         df = df[['Open', 'High', 'Low', 'Close']].copy()
         df.columns = ['open', 'high', 'low', 'close']
@@ -139,16 +125,11 @@ def get_investpy_data(name, country=None, product_type='indices', interval='Dail
         return _clean_ohlc(df)
 
     except Exception:
-        # yfinance fallback (strong for indices & commodities)
         try:
             if yf:
                 ticker_map = {
-                    'NAS100': '^NDX',
-                    'US30': '^DJI',
-                    'SPX500': '^GSPC',
-                    'Gold': 'GC=F',
-                    'Silver': 'SI=F',
-                    'Crude Oil': 'CL=F'
+                    'NAS100': '^NDX', 'US30': '^DJI', 'SPX500': '^GSPC',
+                    'Gold': 'GC=F', 'Silver': 'SI=F', 'Crude Oil': 'CL=F'
                 }
                 ticker = ticker_map.get(name, name)
                 df = yf.download(ticker, period='120d', interval='1d', progress=False)
@@ -161,9 +142,26 @@ def get_investpy_data(name, country=None, product_type='indices', interval='Dail
         return pd.DataFrame()
 
 
-def get_dukascopy_data(symbol, start=None, end=None, timeframe='H1'):
-    print("Dukascopy support in progress.")
-    return pd.DataFrame()
+def get_dukascopy_data(symbol, start_date='2024-01-01', end_date=None, timeframe='H1'):
+    """
+    Dukascopy Integration (Initial)
+    Downloads historical data for backtesting and validation.
+    timeframe: 'tick', 'm1', 'm5', 'm15', 'h1', 'd1'
+    """
+    if end_date is None:
+        end_date = pd.Timestamp.now().strftime('%Y-%m-%d')
+
+    print(f"[Dukascopy] Fetching {symbol} {timeframe} from {start_date} to {end_date}...")
+
+    # Placeholder - Full implementation requires dukascopy library or direct download
+    # For now we return empty and log. Will be expanded.
+    try:
+        # Future: Use dukascopy library or direct HTTP download from Dukascopy historical data
+        print("[Dukascopy] Full download not yet implemented. Returning empty for now.")
+        return pd.DataFrame()
+    except Exception as e:
+        print(f"Dukascopy error: {e}")
+        return pd.DataFrame()
 
 
 def get_oanda_candles(instrument, granularity='M15', count=300):
