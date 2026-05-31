@@ -127,6 +127,44 @@ def get_twelve_data_candles(symbol, interval='15min', outputsize=300):
         return pd.DataFrame()
 
 
+def get_polygon_candles(ticker, multiplier=15, timespan='minute', limit=500):
+    '''Polygon.io as third main source'''
+    api_key = os.getenv('POLYGON_API_KEY')
+    if not api_key:
+        print("POLYGON_API_KEY not set")
+        return pd.DataFrame()
+
+    # Convert timeframe
+    if timespan == '15m':
+        multiplier, timespan = 15, 'minute'
+    elif timespan == '1h':
+        multiplier, timespan = 60, 'minute'
+    elif timespan == '4h':
+        multiplier, timespan = 240, 'minute'
+
+    url = f'https://api.polygon.io/v2/aggs/ticker/{ticker}/range/{multiplier}/{timespan}/2020-01-01/now?adjusted=true&sort=desc&limit={limit}&apiKey={api_key}'
+
+    try:
+        resp = _make_request_with_retry(url)
+        if resp is None:
+            return pd.DataFrame()
+
+        data = resp.json()
+        if data.get('status') != 'OK' or 'results' not in data:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(data['results'])
+        df['time'] = pd.to_datetime(df['t'], unit='ms')
+        df.set_index('time', inplace=True)
+        df = df[['o', 'h', 'l', 'c']].copy()
+        df.columns = ['open', 'high', 'low', 'close']
+        return df.sort_index()
+
+    except Exception as e:
+        print(f'Polygon error for {ticker}: {e}')
+        return pd.DataFrame()
+
+
 def get_yfinance_candles(symbol, period='5d', interval='15m'):
     if yf is None:
         print("yfinance not installed")
@@ -146,7 +184,6 @@ def get_yfinance_candles(symbol, period='5d', interval='15m'):
 
 
 def get_coingecko_candles(coin_id, vs_currency='usd', days=5):
-    '''Free public CoinGecko API as crypto backup (no key needed)'''
     url = f'https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency={vs_currency}&days={days}'
 
     try:
