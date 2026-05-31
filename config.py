@@ -30,8 +30,8 @@ ASSETS = {
 }
 
 TIMEFRAMES = ['15m', '1h', '4h']
-POLL_INTERVAL_SEC = 60
-COOLDOWN_MIN = 25
+POLL_INTERVAL_SEC = 90          # Increased to 90s to be kinder on free tier rate limits
+COOLDOWN_MIN = 30               # 30 min cooldown between same pair/tf signals
 PROB_THRESHOLD_A = 70
 PROB_THRESHOLD_AP = 80
 WAT_TZ_OFFSET = 1
