@@ -2,9 +2,11 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# Reduced to high-quality pairs only + XAGUSD
+# Data sources with OANDA brought back (small list to avoid previous issues)
 ASSETS = {
-    'OANDA': [],
+    'OANDA': [
+        'XAU_USD', 'XAG_USD', 'EUR_USD', 'GBP_USD'
+    ],
 
     'FINNHUB': [
         'OANDA:EUR_USD', 'OANDA:GBP_USD', 'OANDA:USD_JPY',
