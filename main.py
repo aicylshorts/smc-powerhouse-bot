@@ -28,7 +28,6 @@ else:
 sent_signals = {}
 last_update_id = 0
 
-
 def self_ping():
     port = os.environ.get('PORT', '10000')
     url = f'http://127.0.0.1:{port}/health'
@@ -38,7 +37,6 @@ def self_ping():
         except:
             pass
         time.sleep(280)
-
 
 def get_trading_session():
     hour = datetime.now(timezone.utc).hour
@@ -53,7 +51,6 @@ def get_trading_session():
     else:
         return 'Late NY / Asian'
 
-
 def calculate_risk_per_lot(sl_price, entry_price, symbol):
     sl_distance = abs(sl_price - entry_price)
     if 'XAU' in symbol or 'XAG' in symbol:
@@ -62,9 +59,7 @@ def calculate_risk_per_lot(sl_price, entry_price, symbol):
         risk_per_0_01 = round(sl_distance * 10, 2)
     return risk_per_0_01
 
-
 def is_high_impact_news_time():
-    """Improved news filter with multiple windows."""
     from config import AVOID_NEWS_MINUTES_BEFORE, AVOID_NEWS_MINUTES_AFTER, HIGH_IMPACT_WINDOWS
     now = datetime.now(timezone.utc)
     for news_hour, news_minute in HIGH_IMPACT_WINDOWS:
@@ -73,7 +68,6 @@ def is_high_impact_news_time():
         if -AVOID_NEWS_MINUTES_BEFORE <= time_diff <= AVOID_NEWS_MINUTES_AFTER:
             return True
     return False
-
 
 def send_telegram_message(message):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -84,7 +78,6 @@ def send_telegram_message(message):
         requests.post(url, json=payload, timeout=10)
     except Exception as e:
         logger.error(f'Telegram send error: {e}')
-
 
 def check_telegram_commands():
     global last_update_id
@@ -101,7 +94,6 @@ def check_telegram_commands():
                 handle_command(text)
     except:
         pass
-
 
 def handle_command(text):
     parts = text.strip().split()
@@ -136,7 +128,6 @@ def handle_command(text):
         tracker.record_outcome(signal_id, 'NO_TRADE')
         send_telegram_message(f'Marked as NO TRADE for #{signal_id}')
 
-
 @app.route('/')
 def home():
     return 'SMC Powerhouse Bot is running!'
@@ -145,13 +136,12 @@ def home():
 def health():
     return 'OK', 200
 
-
 def generate_signals():
     logger.info('Scanning for high-quality SMC setups...')
     check_telegram_commands()
 
     from config import ASSETS, TIMEFRAMES, COOLDOWN_MIN, PROB_THRESHOLD_A, PROB_THRESHOLD_AP
-    from data_fetcher import get_oanda_candles, get_binance_candles
+    from data_fetcher import get_binance_candles, get_finnhub_candles, get_yfinance_candles
     from utils import detect_smc_setup
 
     current_session = get_trading_session()
@@ -168,12 +158,14 @@ def generate_signals():
                     df = None
                     htf_df = None
 
-                    if broker == 'OANDA':
-                        df = get_oanda_candles(sym, tf)
-                        if tf == '15m':
-                            htf_df = get_oanda_candles(sym, '1h')
-                        elif tf == '1h':
-                            htf_df = get_oanda_candles(sym, '4h')
+                    if broker == 'FINNHUB':
+                        finnhub_res = '15' if tf == '15m' else ('60' if tf == '1h' else '240')
+                        df = get_finnhub_candles(sym, resolution=finnhub_res)
+
+                        # Fallback to yfinance if Finnhub fails
+                        if df is None or len(df) < 50:
+                            yf_symbol = sym.split(':')[-1].replace('_', '') + '=X'
+                            df = get_yfinance_candles(yf_symbol, interval=tf)
 
                     elif broker == 'BINANCE':
                         df = get_binance_candles(sym, tf)
@@ -218,11 +210,9 @@ def generate_signals():
                 except Exception as e:
                     logger.error(f'Error processing {sym} {tf}: {e}')
 
-
 def send_daily_report():
     report = tracker.get_monthly_report()
     send_telegram_message('Daily Performance Summary\n' + report)
-
 
 def run_scheduler():
     schedule.every(60).seconds.do(generate_signals)
@@ -230,7 +220,6 @@ def run_scheduler():
     while True:
         schedule.run_pending()
         time.sleep(30)
-
 
 def start_bot():
     try:
@@ -248,7 +237,6 @@ def start_bot():
         logger.info('Bot running 24/7')
     except Exception as e:
         logger.error(f'start_bot error: {e}')
-
 
 if __name__ == '__main__':
     logger.info('Starting SMC Powerhouse Bot...')
