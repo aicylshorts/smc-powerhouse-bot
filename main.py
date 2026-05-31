@@ -144,7 +144,7 @@ def generate_signals():
     from data_fetcher import (
         get_binance_candles, get_finnhub_candles, get_twelve_data_candles,
         get_alpha_vantage_candles, get_fawaz_exchange_rate, get_investpy_data,
-        get_omkar_commodity_price, get_polygon_candles, get_oanda_candles, get_yfinance_candles
+        get_polygon_candles, get_oanda_candles, get_yfinance_candles
     )
     from utils import detect_smc_setup
 
@@ -157,10 +157,30 @@ def generate_signals():
 
     for broker, symbols in ASSETS.items():
         for sym in symbols:
+            # Fetch 4h data once per symbol for HTF confirmation
+            htf_df = None
+            try:
+                if broker == 'INVESTPY':
+                    if sym in ['NAS100', 'US30', 'SPX500']:
+                        htf_df = get_investpy_data(sym, country='united states', product_type='indices')
+                    else:
+                        htf_df = get_investpy_data(sym, product_type='commodities')
+                elif broker in ['FINNHUB', 'TWELVE_DATA', 'ALPHA_VANTAGE']:
+                    htf_df = get_alpha_vantage_candles(sym.split(':')[-1] if ':' in sym else sym, interval='4h')
+                elif broker == 'FAWAZ_EXCHANGE':
+                    htf_df = get_fawaz_exchange_rate()
+                elif broker == 'POLYGON':
+                    htf_df = get_polygon_candles(sym, timespan='4h')
+                elif broker == 'OANDA':
+                    htf_df = get_oanda_candles(sym, '4h')
+                elif broker == 'BINANCE':
+                    htf_df = get_binance_candles(sym, '4h')
+            except:
+                htf_df = None
+
             for tf in TIMEFRAMES:
                 try:
                     df = None
-                    htf_df = None
 
                     if broker == 'INVESTPY':
                         if sym in ['NAS100', 'US30', 'SPX500']:
@@ -168,16 +188,12 @@ def generate_signals():
                         else:
                             df = get_investpy_data(sym, product_type='commodities')
 
-                    elif broker == 'OMKAR_CLOUD':
-                        # Second priority for Gold and Silver
-                        commodity = 'gold' if 'gold' in sym.lower() else 'silver'
-                        df = get_omkar_commodity_price(commodity)
-
                     elif broker == 'FAWAZ_EXCHANGE':
                         df = get_fawaz_exchange_rate()
 
                     elif broker == 'FINNHUB':
-                        finnhub_res = '15' if tf == '15m' else '60'
+                        finnhub_res = '15' if tf == '15m' else ('60' if tf == '1h' else '240
+')
                         df = get_finnhub_candles(sym, resolution=finnhub_res)
 
                         if df is None or len(df) < 50:
@@ -211,6 +227,7 @@ def generate_signals():
                     if df is None or len(df) < 50:
                         continue
 
+                    # Pass 4h data as higher timeframe confirmation
                     setup = detect_smc_setup(df, sym, tf, htf_df=htf_df)
                     if setup:
                         score = setup.get('score', 0)
