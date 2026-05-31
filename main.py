@@ -144,7 +144,7 @@ def generate_signals():
     from data_fetcher import (
         get_binance_candles, get_finnhub_candles, get_twelve_data_candles,
         get_alpha_vantage_candles, get_fawaz_exchange_rate, get_investpy_data,
-        get_polygon_candles, get_oanda_candles, get_yfinance_candles
+        get_omkar_commodity_price, get_polygon_candles, get_oanda_candles, get_yfinance_candles
     )
     from utils import detect_smc_setup
 
@@ -163,11 +163,15 @@ def generate_signals():
                     htf_df = None
 
                     if broker == 'INVESTPY':
-                        # investpy as primary for indices and commodities
                         if sym in ['NAS100', 'US30', 'SPX500']:
                             df = get_investpy_data(sym, country='united states', product_type='indices')
                         else:
                             df = get_investpy_data(sym, product_type='commodities')
+
+                    elif broker == 'OMKAR_CLOUD':
+                        # Second priority for Gold and Silver
+                        commodity = 'gold' if 'gold' in sym.lower() else 'silver'
+                        df = get_omkar_commodity_price(commodity)
 
                     elif broker == 'FAWAZ_EXCHANGE':
                         df = get_fawaz_exchange_rate()
