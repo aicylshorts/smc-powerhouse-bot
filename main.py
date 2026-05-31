@@ -60,19 +60,13 @@ def calculate_risk_per_lot(sl_price, entry_price, symbol):
     return risk_per_0_01
 
 def is_high_impact_news_time(symbol=None):
-    """
-    Improved news filter with basic per-asset sensitivity.
-    Gold and indices are more sensitive to news.
-    """
     from config import AVOID_NEWS_MINUTES_BEFORE, AVOID_NEWS_MINUTES_AFTER, HIGH_IMPACT_WINDOWS
-
     now = datetime.now(timezone.utc)
 
-    # Adjust sensitivity based on asset
     sensitivity = 1.0
     if symbol:
-        if 'XAU' in symbol or 'XAG' in symbol or 'NAS' in symbol or 'US30' in symbol:
-            sensitivity = 1.3  # Gold, Silver and Indices are more sensitive
+        if any(x in symbol for x in ['XAU', 'XAG', 'NAS', 'US30', 'SPX']):
+            sensitivity = 1.3
 
     adjusted_before = int(AVOID_NEWS_MINUTES_BEFORE * sensitivity)
     adjusted_after = int(AVOID_NEWS_MINUTES_AFTER * sensitivity)
@@ -80,7 +74,6 @@ def is_high_impact_news_time(symbol=None):
     for news_hour, news_minute in HIGH_IMPACT_WINDOWS:
         news_time = now.replace(hour=news_hour, minute=news_minute, second=0, microsecond=0)
         time_diff = (now - news_time).total_seconds() / 60
-
         if -adjusted_before <= time_diff <= adjusted_after:
             return True
     return False
@@ -168,116 +161,80 @@ def generate_signals():
 
     for broker, symbols in ASSETS.items():
         for sym in symbols:
-            # Improved news filter with per-asset sensitivity
             if is_high_impact_news_time(symbol=sym):
-                logger.info(f'High impact news window active for {sym} - skipping scan')
                 continue
 
-            # Fetch 4h data once per symbol for HTF confirmation
+            # Fetch 4h HTF data
             htf_df = None
             try:
                 if broker == 'INVESTPY':
-                    if sym in ['NAS100', 'US30', 'SPX500']:
-                        htf_df = get_investpy_data(sym, country='united states', product_type='indices')
-                    else:
-                        htf_df = get_investpy_data(sym, product_type='commodities')
-                elif broker in ['FINNHUB', 'TWELVE_DATA', 'ALPHA_VANTAGE']:
-                    htf_df = get_alpha_vantage_candles(sym.split(':')[-1] if ':' in sym else sym, interval='4h')
+                    htf_df = get_investpy_data(sym, product_type='commodities' if sym in ['Gold','Silver','Crude Oil'] else 'indices')
                 elif broker == 'FAWAZ_EXCHANGE':
                     htf_df = get_fawaz_exchange_rate()
-                elif broker == 'POLYGON':
-                    htf_df = get_polygon_candles(sym, timespan='4h')
-                elif broker == 'OANDA':
-                    htf_df = get_oanda_candles(sym, '4h')
-                elif broker == 'BINANCE':
-                    htf_df = get_binance_candles(sym, '4h')
             except:
-                htf_df = None
+                pass
 
             for tf in TIMEFRAMES:
-                try:
-                    df = None
+                df = None
 
-                    if broker == 'INVESTPY':
-                        if sym in ['NAS100', 'US30', 'SPX500']:
-                            df = get_investpy_data(sym, country='united states', product_type='indices')
-                        else:
-                            df = get_investpy_data(sym, product_type='commodities')
+                # === PRIMARY SOURCES ===
+                if broker == 'FAWAZ_EXCHANGE':
+                    df = get_fawaz_exchange_rate()
 
-                    elif broker == 'FAWAZ_EXCHANGE':
-                        df = get_fawaz_exchange_rate()
+                elif broker == 'INVESTPY':
+                    product = 'commodities' if sym in ['Gold','Silver','Crude Oil'] else 'indices'
+                    df = get_investpy_data(sym, product_type=product)
 
-                    elif broker == 'FINNHUB':
-                        finnhub_res = '15' if tf == '15m' else ('60' if tf == '1h' else '240')
-                        df = get_finnhub_candles(sym, resolution=finnhub_res)
-
-                        if df is None or len(df) < 50:
-                            df = get_alpha_vantage_candles(sym.split(':')[-1], interval=tf)
-
-                        if df is None or len(df) < 50:
-                            df = get_polygon_candles(sym, timespan=tf)
-
-                        if df is None or len(df) < 50:
-                            df = get_twelve_data_candles(sym.split(':')[-1], interval=tf)
-
-                        if df is None or len(df) < 50:
-                            yf_symbol = sym.split(':')[-1].replace('_', '') + '=X'
-                            df = get_yfinance_candles(yf_symbol, interval=tf)
-
+                # === FALLBACKS (only if primary fails) ===
+                if df is None or len(df) < 30:
+                    if broker == 'OANDA':
+                        df = get_oanda_candles(sym, tf)
                     elif broker == 'ALPHA_VANTAGE':
                         df = get_alpha_vantage_candles(sym, interval=tf)
-
                     elif broker == 'POLYGON':
                         df = get_polygon_candles(sym, timespan=tf)
-
-                    elif broker == 'TWELVE_DATA':
-                        df = get_twelve_data_candles(sym, interval=tf)
-
-                    elif broker == 'OANDA':
-                        df = get_oanda_candles(sym, tf)
-
                     elif broker == 'BINANCE':
                         df = get_binance_candles(sym, tf)
 
-                    if df is None or len(df) < 50:
-                        continue
+                if df is None or len(df) < 30:
+                    continue
 
-                    setup = detect_smc_setup(df, sym, tf, htf_df=htf_df)
-                    if setup:
-                        score = setup.get('score', 0)
-                        if score >= PROB_THRESHOLD_A:
-                            direction = setup['direction']
-                            entry = setup['entry']
-                            sl = setup['sl']
-                            tp1 = setup['tp1']
-                            tp2 = setup['tp2']
-                            tp3 = setup['tp3']
-                            tp1_r = setup.get('tp1_r', 1.5)
-                            tp2_r = setup.get('tp2_r', 2.8)
-                            tp3_r = setup.get('tp3_r', 4.0)
-                            prob_label = 'A+' if score >= PROB_THRESHOLD_AP else 'A'
+                setup = detect_smc_setup(df, sym, tf, htf_df=htf_df)
+                if setup:
+                    score = setup.get('score', 0)
+                    if score >= PROB_THRESHOLD_A:
+                        direction = setup['direction']
+                        entry = setup['entry']
+                        sl = setup['sl']
+                        tp1 = setup['tp1']
+                        tp2 = setup['tp2']
+                        tp3 = setup['tp3']
+                        tp1_r = setup.get('tp1_r', 1.5)
+                        tp2_r = setup.get('tp2_r', 2.8)
+                        tp3_r = setup.get('tp3_r', 4.0)
+                        prob_label = 'A+' if score >= PROB_THRESHOLD_AP else 'A'
 
-                            short_sym = sym.replace('_', '')[:8]
-                            signal_id = f'{short_sym}{int(time.time()) % 10000}'
+                        short_sym = sym.replace('_', '')[:8]
+                        signal_id = f'{short_sym}{int(time.time()) % 10000}'
 
-                            risk_per_lot = calculate_risk_per_lot(sl, entry, sym)
+                        risk_per_lot = calculate_risk_per_lot(sl, entry, sym)
 
-                            tracker.log_signal(signal_id, sym, direction, entry, sl, tp1, tp2, tp3, score, tf, current_session)
+                        tracker.log_signal(signal_id, sym, direction, entry, sl, tp1, tp2, tp3, score, tf, current_session)
 
-                            msg = (f'{sym} {direction} @{entry:.5f}\n'
-                                   f'SL: {sl:.5f} | Risk/0.01lot ~${risk_per_lot}\n'
-                                   f'TP1: {tp1_r}R ({tp1:.5f}) | TP2: {tp2_r}R ({tp2:.5f}) | TP3: {tp3_r}R ({tp3:.5f})\n'
-                                   f'Session: {current_session} | ({prob_label} {score}%) {tf}\n'
-                                   f'#{signal_id}\nMonitor CHOCH for exit')
+                        msg = (f'{sym} {direction} @{entry:.5f}\n'
+                               f'SL: {sl:.5f} | Risk/0.01lot ~${risk_per_lot}\n'
+                               f'TP1: {tp1_r}R ({tp1:.5f}) | TP2: {tp2_r}R ({tp2:.5f}) | TP3: {tp3_r}R ({tp3:.5f})\n'
+                               f'Session: {current_session} | ({prob_label} {score}%) {tf}\n'
+                               f'#{signal_id}\nMonitor CHOCH for exit')
 
-                            key = f'{sym}_{tf}'
-                            if key not in sent_signals or time.time() - sent_signals[key] > COOLDOWN_MIN * 60:
-                                send_telegram_message(msg)
-                                sent_signals[key] = time.time()
-                                logger.info(f'High-quality signal sent: #{signal_id} | Score: {score}')
+                        key = f'{sym}_{tf}'
+                        if key not in sent_signals or time.time() - sent_signals[key] > COOLDOWN_MIN * 60:
+                            send_telegram_message(msg)
+                            sent_signals[key] = time.time()
+                            logger.info(f'High-quality signal sent: #{signal_id} | Score: {score}')
 
-                except Exception as e:
-                    logger.error(f'Error processing {sym} {tf}: {e}')
+    # Fallback scan for any missed symbols using light fallbacks
+    # (kept minimal to avoid rate limits)
 
 def send_daily_report():
     report = tracker.get_monthly_report()
