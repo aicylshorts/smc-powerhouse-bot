@@ -37,9 +37,11 @@ def _make_request_with_retry(url, headers=None, params=None, max_retries=3, back
 
 def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
     """
-    Fawaz improved version.
-    Uses latest rates + small variation for SMC compatibility.
-    Role: Best for direction/bias rather than full pattern detection.
+    Fawaz - Improved & Fine-tuned
+    - Uses latest rates
+    - Adds controlled variation for SMC compatibility
+    - Best role: Direction / Bias detection
+    - Not ideal for full pattern recognition
     """
     if symbols is None:
         symbols = ['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD']
@@ -62,12 +64,13 @@ def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
             rate = rates.get(sym.lower())
             if rate:
                 close = float(rate)
-                variation = close * 0.0003
+                # Controlled variation for pattern detection
+                variation = close * 0.00025
                 df_data.append({
                     'symbol': f'{base_currency}{sym}',
                     'open': round(close - variation, 5),
-                    'high': round(close + variation, 5),
-                    'low': round(close - variation, 5),
+                    'high': round(close + variation * 1.2, 5),
+                    'low': round(close - variation * 1.2, 5),
                     'close': round(close, 5)
                 })
 
@@ -86,19 +89,13 @@ def get_fawaz_exchange_rate(base_currency='USD', symbols=None):
 
 def get_investpy_data(name, country=None, product_type='indices', interval='Daily'):
     """
-    Improved investpy with better interval handling and fallback.
+    investpy - Fine-tuned version with smart fallback
     """
     if investpy is None:
         print("investpy not installed")
         return pd.DataFrame()
 
-    # Map our timeframes to investpy intervals
-    inv_interval = {
-        '15m': 'Daily',   # investpy has weak intraday support
-        '1h': 'Daily',
-        '4h': 'Daily',
-        'Daily': 'Daily'
-    }.get(interval, 'Daily')
+    inv_interval = 'Daily'
 
     try:
         if product_type == 'indices':
@@ -120,7 +117,7 @@ def get_investpy_data(name, country=None, product_type='indices', interval='Dail
             return pd.DataFrame()
 
         if df.empty:
-            return pd.DataFrame()
+            raise ValueError("Empty data")
 
         df = df[['Open', 'High', 'Low', 'Close']].copy()
         df.columns = ['open', 'high', 'low', 'close']
@@ -128,8 +125,8 @@ def get_investpy_data(name, country=None, product_type='indices', interval='Dail
         return df
 
     except Exception as e:
-        print(f'investpy error for {name}: {e}')
-        # Fallback to yfinance
+        print(f'investpy failed for {name}, trying yfinance fallback...')
+        # yfinance fallback
         try:
             if yf:
                 ticker_map = {
@@ -137,16 +134,17 @@ def get_investpy_data(name, country=None, product_type='indices', interval='Dail
                     'US30': '^DJI',
                     'SPX500': '^GSPC',
                     'Gold': 'GC=F',
-                    'Silver': 'SI=F'
+                    'Silver': 'SI=F',
+                    'Crude Oil': 'CL=F'
                 }
                 ticker = ticker_map.get(name, name)
-                df = yf.download(ticker, period='60d', interval='1d', progress=False)
+                df = yf.download(ticker, period='90d', interval='1d', progress=False)
                 if not df.empty:
                     df = df[['Open', 'High', 'Low', 'Close']].copy()
                     df.columns = ['open', 'high', 'low', 'close']
                     return df
-        except:
-            pass
+        except Exception as yf_err:
+            print(f'yfinance fallback also failed: {yf_err}')
         return pd.DataFrame()
 
 
