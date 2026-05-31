@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# Multi-source setup (Tiingo removed for now)
+# Optimized config - reduced timeframes and slower polling
 ASSETS = {
     'OANDA': [
         'XAU_USD', 'XAG_USD', 'EUR_USD', 'GBP_USD'
@@ -35,8 +35,8 @@ ASSETS = {
     ]
 }
 
-TIMEFRAMES = ['15m', '1h', '4h']
-POLL_INTERVAL_SEC = 90
+TIMEFRAMES = ['15m', '1h']           # Reduced from 3 to 2 timeframes
+POLL_INTERVAL_SEC = 120             # Increased from 90s to 120s
 COOLDOWN_MIN = 30
 PROB_THRESHOLD_A = 70
 PROB_THRESHOLD_AP = 80
