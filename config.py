@@ -2,15 +2,20 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# OANDA temporarily disabled due to network instability on Render free tier.
-# Running primarily on Finnhub + yfinance fallback.
+# Data source priority: Finnhub (Primary) -> Twelve Data (Secondary) -> yfinance (Fallback)
 ASSETS = {
-    'OANDA': [],   # Disabled
+    'OANDA': [],                    # Disabled due to network issues
 
     'FINNHUB': [
         'OANDA:EUR_USD', 'OANDA:GBP_USD', 'OANDA:USD_JPY', 'OANDA:AUD_USD',
         'OANDA:XAU_USD', 'OANDA:XAG_USD',
         'OANDA:NAS100_USD', 'OANDA:US30_USD'
+    ],
+
+    'TWELVE_DATA': [
+        'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD',
+        'XAU/USD', 'XAG/USD',
+        'NAS100/USD', 'US30/USD'
     ],
 
     'BINANCE': [
@@ -25,7 +30,6 @@ PROB_THRESHOLD_A = 70
 PROB_THRESHOLD_AP = 80
 WAT_TZ_OFFSET = 1
 
-# News Filter Settings
 AVOID_NEWS_MINUTES_BEFORE = 25
 AVOID_NEWS_MINUTES_AFTER = 25
 
