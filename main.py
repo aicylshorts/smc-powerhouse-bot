@@ -162,31 +162,35 @@ def generate_signals():
                     df = None
                     htf_df = None
 
+                    # New priority: Finnhub -> Alpha Vantage -> Polygon -> Twelve Data -> OANDA -> yfinance
                     if broker == 'FINNHUB':
-                        finnhub_res = '15' if tf == '15m' else ('60' if tf == '1h' else '240')
+                        finnhub_res = '15' if tf == '15m' else '60'
                         df = get_finnhub_candles(sym, resolution=finnhub_res)
-
-                        if df is None or len(df) < 50:
-                            df = get_twelve_data_candles(sym.split(':')[-1], interval=tf)
 
                         if df is None or len(df) < 50:
                             df = get_alpha_vantage_candles(sym.split(':')[-1], interval=tf)
 
                         if df is None or len(df) < 50:
+                            df = get_polygon_candles(sym, timespan=tf)
+
+                        if df is None or len(df) < 50:
+                            df = get_twelve_data_candles(sym.split(':')[-1], interval=tf)
+
+                        if df is None or len(df) < 50:
                             yf_symbol = sym.split(':')[-1].replace('_', '') + '=X'
                             df = get_yfinance_candles(yf_symbol, interval=tf)
-
-                    elif broker == 'OANDA':
-                        df = get_oanda_candles(sym, tf)
-
-                    elif broker == 'TWELVE_DATA':
-                        df = get_twelve_data_candles(sym, interval=tf)
 
                     elif broker == 'ALPHA_VANTAGE':
                         df = get_alpha_vantage_candles(sym, interval=tf)
 
                     elif broker == 'POLYGON':
                         df = get_polygon_candles(sym, timespan=tf)
+
+                    elif broker == 'TWELVE_DATA':
+                        df = get_twelve_data_candles(sym, interval=tf)
+
+                    elif broker == 'OANDA':
+                        df = get_oanda_candles(sym, tf)
 
                     elif broker == 'BINANCE':
                         df = get_binance_candles(sym, tf)
