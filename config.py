@@ -2,9 +2,9 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-# Data source priority: Finnhub (Primary) -> Twelve Data (Secondary) -> yfinance (Fallback)
+# Priority: Finnhub (1) -> Twelve Data (2) -> Polygon (3) -> yfinance (Fallback)
 ASSETS = {
-    'OANDA': [],                    # Disabled due to network issues
+    'OANDA': [],
 
     'FINNHUB': [
         'OANDA:EUR_USD', 'OANDA:GBP_USD', 'OANDA:USD_JPY', 'OANDA:AUD_USD',
@@ -16,6 +16,12 @@ ASSETS = {
         'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD',
         'XAU/USD', 'XAG/USD',
         'NAS100/USD', 'US30/USD'
+    ],
+
+    'POLYGON': [
+        'C:EURUSD', 'C:GBPUSD', 'C:USDJPY', 'C:AUDUSD',
+        'X: XAUUSD', 'X: XAGUSD',
+        'I:SPX', 'I:NDX'
     ],
 
     'BINANCE': [
