@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from flask import Flask
 
 import tracker
+from utils import detect_smc_setup
 
 load_dotenv()
 
@@ -51,23 +52,17 @@ def get_trading_session():
     else:
         return 'Late NY / Asian'
 
-def calculate_risk_per_lot(sl_price, entry_price, symbol):
-    sl_distance = abs(sl_price - entry_price)
-    if 'XAU' in symbol or 'XAG' in symbol:
-        risk_per_0_01 = round(sl_distance * 10, 2)
-    else:
-        risk_per_0_01 = round(sl_distance * 10, 2)
-    return risk_per_0_01
+def calculate_position_size(entry, sl, risk_usd=10):
+    risk_per_unit = abs(entry - sl)
+    if risk_per_unit == 0:
+        return 0.01
+    size = risk_usd / risk_per_unit
+    return max(round(size, 2), 0.01)
 
 def is_high_impact_news_time(symbol=None):
     from config import AVOID_NEWS_MINUTES_BEFORE, AVOID_NEWS_MINUTES_AFTER, HIGH_IMPACT_WINDOWS
     now = datetime.now(timezone.utc)
-
-    sensitivity = 1.0
-    if symbol:
-        if any(x in symbol for x in ['XAU', 'XAG', 'NAS', 'US30', 'SPX']):
-            sensitivity = 1.3
-
+    sensitivity = 1.3 if symbol and any(x in symbol for x in ['XAU', 'XAG', 'NAS', 'US30']) else 1.0
     adjusted_before = int(AVOID_NEWS_MINUTES_BEFORE * sensitivity)
     adjusted_after = int(AVOID_NEWS_MINUTES_AFTER * sensitivity)
 
@@ -149,13 +144,10 @@ def generate_signals():
     logger.info('Scanning for high-quality SMC setups...')
     check_telegram_commands()
 
-    from config import ASSETS, TIMEFRAMES, COOLDOWN_MIN, PROB_THRESHOLD_A, PROB_THRESHOLD_AP
+    from config import ASSETS, TIMEFRAMES, COOLDOWN_MIN, PROB_THRESHOLD_A
     from data_fetcher import (
-        get_binance_candles, get_finnhub_candles, get_twelve_data_candles,
-        get_alpha_vantage_candles, get_fawaz_exchange_rate, get_investpy_data,
-        get_polygon_candles, get_oanda_candles, get_yfinance_candles
+        get_fawaz_exchange_rate, get_investpy_data, get_dukascopy_data
     )
-    from utils import detect_smc_setup
 
     current_session = get_trading_session()
 
@@ -167,7 +159,7 @@ def generate_signals():
             htf_df = None
             try:
                 if broker == 'INVESTPY':
-                    htf_df = get_investpy_data(sym, product_type='commodities' if sym in ['Gold','Silver','Crude Oil'] else 'indices', interval='Daily')
+                    htf_df = get_investpy_data(sym, product_type='commodities' if 'Gold' in sym or 'Silver' in sym else 'indices')
                 elif broker == 'FAWAZ_EXCHANGE':
                     htf_df = get_fawaz_exchange_rate()
             except:
@@ -176,65 +168,45 @@ def generate_signals():
             for tf in TIMEFRAMES:
                 df = None
 
-                # Primary Sources
                 if broker == 'FAWAZ_EXCHANGE':
                     df = get_fawaz_exchange_rate()
-
                 elif broker == 'INVESTPY':
-                    product = 'commodities' if sym in ['Gold','Silver','Crude Oil'] else 'indices'
-                    # Use appropriate interval
-                    inv_interval = 'Daily'
-                    if tf in ['15m', '1h']:
-                        inv_interval = 'Hourly'
-                    df = get_investpy_data(sym, product_type=product, interval=inv_interval)
+                    product = 'commodities' if 'Gold' in sym or 'Silver' in sym else 'indices'
+                    df = get_investpy_data(sym, product_type=product)
 
-                # Light fallbacks
-                if df is None or len(df) < 30:
-                    if broker == 'OANDA':
-                        df = get_oanda_candles(sym, tf)
-                    elif broker == 'ALPHA_VANTAGE':
-                        df = get_alpha_vantage_candles(sym, interval=tf)
-                    elif broker == 'POLYGON':
-                        df = get_polygon_candles(sym, timespan=tf)
-                    elif broker == 'BINANCE':
-                        df = get_binance_candles(sym, tf)
-
-                if df is None or len(df) < 30:
+                if df is None or len(df) < 50:
                     continue
 
                 setup = detect_smc_setup(df, sym, tf, htf_df=htf_df)
-                if setup:
-                    score = setup.get('score', 0)
-                    if score >= PROB_THRESHOLD_A:
-                        direction = setup['direction']
-                        entry = setup['entry']
-                        sl = setup['sl']
-                        tp1 = setup['tp1']
-                        tp2 = setup['tp2']
-                        tp3 = setup['tp3']
-                        tp1_r = setup.get('tp1_r', 1.5)
-                        tp2_r = setup.get('tp2_r', 2.8)
-                        tp3_r = setup.get('tp3_r', 4.0)
-                        prob_label = 'A+' if score >= PROB_THRESHOLD_AP else 'A'
 
-                        short_sym = sym.replace('_', '')[:8]
-                        signal_id = f'{short_sym}{int(time.time()) % 10000}'
+                if setup and setup.get('score', 0) >= PROB_THRESHOLD_A:
+                    direction = setup['direction']
+                    entry = setup['entry']
+                    sl = setup['sl']
+                    tp1 = setup['tp1']
+                    tp2 = setup['tp2']
+                    tp3 = setup['tp3']
+                    score = setup['score']
 
-                        risk_per_lot = calculate_risk_per_lot(sl, entry, sym)
+                    risk_usd = 10  # User can change this
+                    position_size = calculate_position_size(entry, sl, risk_usd)
 
-                        tracker.log_signal(signal_id, sym, direction, entry, sl, tp1, tp2, tp3, score, tf, current_session)
+                    short_sym = sym.replace('_', '')[:8]
+                    signal_id = f'{short_sym}{int(time.time()) % 10000}'
 
-                        msg = (f'{sym} {direction} @{entry:.5f}\n'
-                               f'SL: {sl:.5f} | Risk/0.01lot ~${risk_per_lot}\n'
-                               f'TP1: {tp1_r}R ({tp1:.5f}) | TP2: {tp2_r}R ({tp2:.5f}) | TP3: {tp3_r}R ({tp3:.5f})\n'
-                               f'Session: {current_session} | ({prob_label} {score}%) {tf}\n'
-                               f'#{signal_id}\nMonitor CHOCH for exit')
+                    tracker.log_signal(signal_id, sym, direction, entry, sl, tp1, tp2, tp3, score, tf, current_session)
 
-                        key = f'{sym}_{tf}'
-                        if key not in sent_signals or time.time() - sent_signals[key] > COOLDOWN_MIN * 60:
-                            send_telegram_message(msg)
-                            sent_signals[key] = time.time()
-                            logger.info(f'High-quality signal sent: #{signal_id} | Score: {score}')
+                    msg = (f'{sym} {direction} @{entry}\n'
+                           f'SL: {sl} | Size: {position_size} lots (~${risk_usd} risk)\n'
+                           f'TP1: {tp1} ({setup.get("tp1_r", 1.5)}R) | TP2: {tp2} ({setup.get("tp2_r", 2.8)}R) | TP3: {tp3} ({setup.get("tp3_r", 4.5)}R)\n'
+                           f'Score: {score}% | {tf} | {current_session}\n'
+                           f'#{signal_id}\nMonitor CHOCH for exit')
+
+                    key = f'{sym}_{tf}'
+                    if key not in sent_signals or time.time() - sent_signals[key] > COOLDOWN_MIN * 60:
+                        send_telegram_message(msg)
+                        sent_signals[key] = time.time()
+                        logger.info(f'High-quality signal sent: #{signal_id} | Score: {score}')
 
 
 def send_daily_report():
@@ -256,11 +228,9 @@ def start_bot():
 
         ping_thread = threading.Thread(target=self_ping, daemon=True)
         ping_thread.start()
-        logger.info('Self-ping started (keeps instance awake)')
 
         scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
         scheduler_thread.start()
-        logger.info('Scheduler started')
         logger.info('Bot running 24/7')
     except Exception as e:
         logger.error(f'start_bot error: {e}')
